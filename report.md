@@ -2495,3 +2495,165 @@ Flutter 在渲染界面時，使用 `const` 關鍵字標記的 widget 能夠被�
 ### 總結
 
 通過今天的工作，我們進一步加強了系統的用戶註冊功能，解決了可能影響用戶體驗的潛在問題。這些優化雖然對用戶來說可能不是直接可見的，但顯著提高了應用的穩定性和可靠性，為用戶提供了更加流暢和專業的使用體驗。未來我們將繼續關注系統其他部分的優化，確保整個應用始終保持高質量和良好性能。
+
+# SQLite 田徑比賽管理系統數據庫診斷報告
+
+## 日期：2024年9月9日
+
+## 問題描述
+
+經過調查，我們發現儘管該應用實現了 SQLite 本地儲存功能，但創建的比賽資料並沒有成功寫入 SQLite 數據庫。用戶反饋創建比賽後，數據似乎只保存在 Firebase 雲端，而沒有在本地 SQLite 數據庫中保留副本。
+
+## 技術診斷結果
+
+### 1. SQLite 配置確認
+
+- SQLite 數據庫確實存在且已正確初始化
+- 數據庫路徑: `/Users/harolddev/Library/Containers/com.example.sbaaa/Data/Documents/competition_app.db`
+- 表結構正確，包含 `competitions` 和 `participants` 兩個表
+- 數據庫表結構符合應用需求，包含必要的欄位
+
+### 2. 代碼審查發現
+
+代碼中確實實現了雙重儲存機制：
+```dart
+// 第一步：保存到Firestore並獲取ID
+try {
+  final docRef = await competitionsRef.add(competitionData);
+  id = docRef.id;
+  competitionData['id'] = id;
+  await docRef.update({'id': id});
+  firebaseSuccess = true;
+} catch (firebaseError) {
+  _log.warning('保存到Firebase失敗: $firebaseError');
+}
+
+// 第二步：保存到SQLite數據庫
+try {
+  final result = await CompetitionManager.instance.insertFromMap(competitionData);
+  _log.info('✅ 已插入 SQLite！結果: $result, ID: $id');
+  sqliteSuccess = true;
+} catch (e) {
+  sqliteError = e.toString();
+  _log.severe('❌ 保存到SQLite失敗: $e');
+}
+```
+
+### 3. 問題診斷
+
+1. **SQLite 數據庫為空**: 通過檢查發現 `competitions` 表中沒有記錄
+   ```sql
+   SELECT COUNT(*) FROM competitions; -- 結果: 0
+   ```
+
+2. **可能的原因**:
+   - SQL 表結構與 CompetitionData 模型不匹配
+   - insertFromMap 方法可能存在邏輯錯誤
+   - 事務可能未正確提交
+   - 可能存在競態條件，導致數據在調試時看起來已插入，但實際未持久化
+
+3. **數據流程分析**:
+   - 創建競賽時，應用會先保存到 Firebase
+   - 然後嘗試將同一數據保存到 SQLite
+   - 日誌輸出顯示 "已插入 SQLite"，但實際數據庫中沒有數據
+
+## 解決方案建議
+
+### 1. 驗證 SQLite 事務提交
+
+修改 CompetitionManager.insertFromMap 方法，確保使用完整的事務:
+
+```dart
+Future<int> insertFromMap(Map<String, dynamic> competitionData) async {
+  try {
+    final Database db = await database;
+    return await db.transaction((txn) async {
+      // 轉換為適合數據庫的列名格式
+      final Map<String, dynamic> row = {
+        'id': competitionData['id'],
+        'name': competitionData['name'],
+        // ... 其他欄位
+      };
+      
+      int result = await txn.insert(
+        tableCompetitions,
+        row,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      
+      // 驗證數據已插入
+      final inserted = await txn.query(
+        tableCompetitions,
+        where: 'id = ?',
+        whereArgs: [row['id']],
+      );
+      
+      return result;
+    });
+  } catch (e) {
+    _log.severe('插入失敗: $e');
+    rethrow;
+  }
+}
+```
+
+### 2. 添加直接測試方法
+
+開發一個測試方法，直接驗證 SQLite 存儲:
+
+```dart
+Future<bool> testSQLiteStorage() async {
+  // 創建測試數據
+  final testData = {
+    'id': 'test_${DateTime.now().millisecondsSinceEpoch}',
+    'name': 'Test Competition',
+    'description': 'Test Description',
+    'venue': 'Test Venue',
+    'startDate': '2024-09-09',
+    'endDate': '2024-09-10',
+    'status': '測試',
+    'createdBy': 'System Test',
+    'createdAt': DateTime.now().toIso8601String(),
+  };
+  
+  try {
+    // 直接插入 SQLite
+    await CompetitionManager.instance.insertFromMap(testData);
+    
+    // 讀取數據進行驗證
+    final db = await CompetitionManager.instance.database;
+    final result = await db.query(
+      'competitions',
+      where: 'id = ?',
+      whereArgs: [testData['id']],
+    );
+    
+    return result.isNotEmpty;
+  } catch (e) {
+    _log.severe('測試失敗: $e');
+    return false;
+  }
+}
+```
+
+### 3. 添加錯誤處理和日誌增強
+
+在關鍵位置添加更詳細的錯誤處理和日誌記錄:
+
+```dart
+try {
+  // 操作代碼
+} catch (e, stackTrace) {
+  _log.severe('操作失敗: $e');
+  _log.severe('堆疊追蹤: $stackTrace');
+  // 嘗試持久化錯誤信息，以便後續調試
+  File('${(await getApplicationDocumentsDirectory()).path}/error_log.txt')
+    .writeAsStringSync('錯誤時間: ${DateTime.now()}\n錯誤: $e\n堆疊: $stackTrace\n\n', 
+    mode: FileMode.append);
+  rethrow;
+}
+```
+
+## 結論
+
+SQLite 存儲功能在應用中確實已實現，但存在數據未正確持久化的問題。通過實施上述建議，應用將能夠實現真正的雙重數據儲存，確保即使在離線狀態下也能保存和訪問競賽數據。建議在下一次開發迭代中優先處理這個問題，以提升應用的離線功能和可靠性。
