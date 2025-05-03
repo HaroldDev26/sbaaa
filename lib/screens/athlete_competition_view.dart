@@ -9,6 +9,7 @@ import '../widgets/empty_state_widget.dart';
 import '../utils/age_group_handler.dart'; // 導入年齡組別處理工具
 import 'athlete_registration_form_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'; // 添加這一行以使用 debugPrint
 
 class AthleteCompetitionViewScreen extends StatefulWidget {
   final String competitionId;
@@ -71,46 +72,47 @@ class _AthleteCompetitionViewScreenState
       // 標記開始報名流程
       await _viewModel.startRegistration(competition);
 
-      if (mounted) {
-        // 導航到報名頁面
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AthleteRegistrationFormScreen(
-              competitionId: competition.id,
-              competitionName: competition.name,
-              viewMode: false, // 編輯模式
-            ),
-          ),
-        );
+      if (!mounted) return; // 確保 widget 仍然掛載
 
-        // 如果返回true，表示報名成功，刷新數據
-        if (result == true) {
-          _viewModel.refresh();
-        }
+      // 導航到報名頁面
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AthleteRegistrationFormScreen(
+            competitionId: competition.id,
+            competitionName: competition.name,
+            viewMode: false, // 編輯模式
+          ),
+        ),
+      );
+
+      // 如果返回true，表示報名成功，刷新數據
+      if (result == true && mounted) {
+        // 確保 widget 仍然掛載
+        _viewModel.refresh();
       }
     } catch (e) {
-      print('導航到報名頁面出錯: $e');
+      debugPrint('導航到報名頁面出錯: $e');
     }
   }
 
   // 查看已提交的報名表
   void _viewRegistrationForm(CompetitionModel competition) async {
     try {
-      if (mounted) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AthleteRegistrationFormScreen(
-              competitionId: competition.id,
-              competitionName: competition.name,
-              viewMode: true, // 查看模式
-            ),
+      if (!mounted) return; // 確保 widget 仍然掛載
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AthleteRegistrationFormScreen(
+            competitionId: competition.id,
+            competitionName: competition.name,
+            viewMode: true, // 查看模式
           ),
-        );
-      }
+        ),
+      );
     } catch (e) {
-      print('導航到報名查看頁面出錯: $e');
+      debugPrint('導航到報名查看頁面出錯: $e');
     }
   }
 
@@ -119,6 +121,8 @@ class _AthleteCompetitionViewScreenState
     // 如果沒有登錄用戶資料，則可能需要先提示登錄
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
+      if (!mounted) return; // 確保 widget 仍然掛載
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('請先登入帳號以使用此功能')),
       );
@@ -151,6 +155,8 @@ class _AthleteCompetitionViewScreenState
         allAgeGroups = AgeGroupHandler.getDefaultAgeGroups();
       }
 
+      if (!mounted) return; // 確保 widget 仍然掛載
+
       // 使用AgeGroupHandler顯示年齡分組選擇對話框
       final selectedAgeGroup = await showDialog<Map<String, dynamic>>(
         context: context,
@@ -176,6 +182,8 @@ class _AthleteCompetitionViewScreenState
         }
       }
     } catch (e) {
+      if (!mounted) return; // 確保 widget 仍然掛載
+
       // 顯示錯誤信息
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('篩選比賽時出錯: $e')),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/competition_model.dart';
 import 'package:intl/intl.dart';
 import '../utils/age_group_handler.dart'; // 導入年齡分組處理工具
+import 'package:flutter/foundation.dart'; // 添加這一行以使用 debugPrint
 
 // 定義比賽報名狀態枚舉
 enum RegistrationStatus {
@@ -24,20 +25,6 @@ class CompetitionDetailWidget extends StatelessWidget {
     this.onViewRegistrationTap,
     this.isLoadingRegistration = false,
   }) : super(key: key);
-
-  // 獲取比賽狀態對應的顏色
-  Color getStatusColor() {
-    switch (competition.status) {
-      case '計劃中':
-        return Colors.blue;
-      case '進行中':
-        return Colors.green;
-      case '已結束':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
 
   // 獲取報名狀態
   RegistrationStatus get registrationStatus {
@@ -101,13 +88,13 @@ class CompetitionDetailWidget extends StatelessWidget {
 
     // 確保錯誤處理
     if (events.isEmpty) {
-      print('沒有可用的比賽項目');
+      debugPrint('沒有可用的比賽項目');
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildHeaderBanner(getStatusColor()),
+        _buildHeaderBanner(),
         const SizedBox(height: 24),
         _buildRegistrationStatusIndicator(getRegistrationStatusColor()),
         const SizedBox(height: 20),
@@ -119,14 +106,16 @@ class CompetitionDetailWidget extends StatelessWidget {
   }
 
   // 頂部橫幅區域
-  Widget _buildHeaderBanner(Color statusColor) {
+  Widget _buildHeaderBanner() {
+    Color defaultColor = Colors.blue; // 使用默認顏色
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            statusColor.withOpacity(0.7),
-            statusColor.withOpacity(0.2),
+            defaultColor.withValues(alpha: 0.7),
+            defaultColor.withValues(alpha: 0.2),
           ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -149,41 +138,12 @@ class CompetitionDetailWidget extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          // 狀態標籤
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _getStatusIcon(competition.status),
-                  size: 16,
-                  color: Colors.white,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  competition.status,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
           // 比賽描述
           Text(
             competition.description,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               height: 1.4,
             ),
             textAlign: TextAlign.center,
@@ -193,29 +153,15 @@ class CompetitionDetailWidget extends StatelessWidget {
     );
   }
 
-  // 獲取狀態對應的圖標
-  IconData _getStatusIcon(String status) {
-    switch (status) {
-      case '計劃中':
-        return Icons.event_available;
-      case '進行中':
-        return Icons.play_circle_fill;
-      case '已結束':
-        return Icons.event_busy;
-      default:
-        return Icons.help_outline;
-    }
-  }
-
   // 報名狀態指示器
   Widget _buildRegistrationStatusIndicator(Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       margin: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -241,7 +187,7 @@ class CompetitionDetailWidget extends StatelessWidget {
                     '截止日期: ${DateFormat('yyyy-MM-dd').format(competition.registrationDeadline!)}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: color.withOpacity(0.8),
+                      color: color.withValues(alpha: 0.8),
                     ),
                   ),
               ],
@@ -274,7 +220,7 @@ class CompetitionDetailWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color),
       ),
@@ -298,7 +244,7 @@ class CompetitionDetailWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -427,13 +373,8 @@ class CompetitionDetailWidget extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildDetailRow(
-                      Icons.timer,
-                      '報名截止日期',
-                      deadlineText,
-                      competition.isDeadlinePassed
-                          ? Colors.red
-                          : Colors.green.shade700),
+                  _buildDetailRow(Icons.timer, '報名截止日期', deadlineText,
+                      competition.isDeadlinePassed ? Colors.red : Colors.green),
                   if (!competition.isDeadlinePassed) ...[
                     const SizedBox(height: 8),
                     Row(
@@ -724,9 +665,9 @@ class CompetitionDetailWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.1),
+        color: Colors.green.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.green.withOpacity(0.3)),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -773,9 +714,9 @@ class CompetitionDetailWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
+        color: Colors.red.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -824,9 +765,9 @@ class CompetitionDetailWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -875,9 +816,9 @@ class CompetitionDetailWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.1),
+        color: Colors.blue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [

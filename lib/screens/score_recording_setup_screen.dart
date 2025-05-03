@@ -198,6 +198,8 @@ class _ScoreRecordingSetupScreenState extends State<ScoreRecordingSetupScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('成績紀錄設定 - ${widget.competitionName}'),
+        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.save),

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../utils/colors.dart';
 import '../utils/utils.dart';
+import 'package:flutter/foundation.dart';
 
 class AthleteEditProfileScreen extends StatefulWidget {
   const AthleteEditProfileScreen({Key? key}) : super(key: key);
@@ -275,7 +276,7 @@ class _AthleteEditProfileScreenState extends State<AthleteEditProfileScreen> {
                                 ? Chip(
                                     label: Text('$_calculatedAge 歲'),
                                     backgroundColor:
-                                        primaryColor.withOpacity(0.1),
+                                        primaryColor.withValues(alpha: 0.1),
                                   )
                                 : null,
                           ),
@@ -466,7 +467,7 @@ class _AthleteEditProfileScreenState extends State<AthleteEditProfileScreen> {
         }
       }
     } catch (e) {
-      print('獲取年齡組別數據失敗: $e');
+      debugPrint('獲取年齡組別數據失敗: $e');
     }
 
     return eligibleGroups;

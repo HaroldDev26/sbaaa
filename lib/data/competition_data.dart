@@ -126,13 +126,10 @@ class CompetitionData {
     while (i < _competitions.length) {
       final competition = _competitions[i];
 
-      // 先檢查狀態是否匹配
-      if (filter == '全部' || competition.status == filter) {
-        // 再檢查名稱是否匹配
-        if (query.isEmpty ||
-            competition.name.toLowerCase().contains(lowerQuery)) {
-          results.add(competition);
-        }
+      // 只過濾名稱，不再檢查狀態
+      if (query.isEmpty ||
+          competition.name.toLowerCase().contains(lowerQuery)) {
+        results.add(competition);
       }
 
       i++;

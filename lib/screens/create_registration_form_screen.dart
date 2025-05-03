@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'; // 添加這一行以使用 debugPrint
 
 class CreateRegistrationFormScreen extends StatefulWidget {
   final String competitionId;
@@ -259,9 +260,9 @@ class _CreateRegistrationFormScreenState
       // 合併所有選中的欄位
       final allSelected = [...autoSelected, ...manualSelected];
 
-      print('已選欄位數量: ${allSelected.length}');
-      print('選中的自動欄位: ${autoSelected.length}');
-      print('選中的手動欄位: ${manualSelected.length}');
+      debugPrint('已選欄位數量: ${allSelected.length}');
+      debugPrint('選中的自動欄位: ${autoSelected.length}');
+      debugPrint('選中的手動欄位: ${manualSelected.length}');
 
       if (allSelected.isEmpty) {
         throw Exception('請至少選擇一個欄位');
@@ -272,7 +273,7 @@ class _CreateRegistrationFormScreenState
           .where((event) => selectedEvents[event['id'].toString()] == true)
           .toList();
 
-      print('已選項目數量: ${selectedEventsList.length}');
+      debugPrint('已選項目數量: ${selectedEventsList.length}');
 
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
@@ -296,18 +297,18 @@ class _CreateRegistrationFormScreenState
         formData["createdAt"] = FieldValue.serverTimestamp();
       }
 
-      print('準備保存表單數據到 Firebase...');
-      print('表單ID: ${_existingFormId ?? "新表單"}');
+      debugPrint('準備保存表單數據到 Firebase...');
+      debugPrint('表單ID: ${_existingFormId ?? "新表單"}');
 
       // 根據是否已存在表格決定更新或新增
       if (_existingForm && _existingFormId != null) {
-        print('正在更新現有表單...');
+        debugPrint('正在更新現有表單...');
         await FirebaseFirestore.instance
             .collection('registrationForms')
             .doc(_existingFormId)
             .update(formData);
 
-        print('表單更新成功!');
+        debugPrint('表單更新成功!');
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -319,12 +320,12 @@ class _CreateRegistrationFormScreenState
           );
         }
       } else {
-        print('正在創建新表單...');
+        debugPrint('正在創建新表單...');
         final docRef = await FirebaseFirestore.instance
             .collection('registrationForms')
             .add(formData);
 
-        print('表單創建成功! 新ID: ${docRef.id}');
+        debugPrint('表單創建成功! 新ID: ${docRef.id}');
 
         // 更新比賽文檔，將表單ID關聯到比賽中
         await FirebaseFirestore.instance
@@ -353,7 +354,7 @@ class _CreateRegistrationFormScreenState
         Navigator.pop(context, true);
       }
     } catch (e) {
-      print('儲存表單失敗: $e');
+      debugPrint('儲存表單失敗: $e');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -397,7 +398,7 @@ class _CreateRegistrationFormScreenState
                       title: Text(
                           '已選 ${selectedFields.values.where((v) => v).length} 個欄位'),
                       background: Container(
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withValues(alpha: 0.1),
                         child: _buildSelectedChips(),
                       ),
                     ),
@@ -496,10 +497,10 @@ class _CreateRegistrationFormScreenState
                         margin: const EdgeInsets.symmetric(vertical: 24),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withOpacity(0.1),
+                          color: Colors.amber.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: Colors.amber.withOpacity(0.3),
+                            color: Colors.amber.withValues(alpha: 0.3),
                           ),
                         ),
                         child: const Column(
@@ -558,8 +559,8 @@ class _CreateRegistrationFormScreenState
           return Chip(
             label: Text(field['label']),
             backgroundColor: isAutoFetch
-                ? Colors.blue.withOpacity(0.1)
-                : Colors.green.withOpacity(0.1),
+                ? Colors.blue.withValues(alpha: 0.1)
+                : Colors.green.withValues(alpha: 0.1),
             labelStyle: const TextStyle(fontSize: 12),
             avatar: isAutoFetch
                 ? const Icon(Icons.download_done, size: 16)
@@ -616,7 +617,7 @@ class _CreateRegistrationFormScreenState
                     });
                   },
                   backgroundColor: Colors.white,
-                  selectedColor: Colors.blue.withOpacity(0.2),
+                  selectedColor: Colors.blue.withValues(alpha: 0.2),
                   checkmarkColor: Colors.blue,
                   labelStyle: TextStyle(
                     color: isSelected ? Colors.blue : Colors.black,

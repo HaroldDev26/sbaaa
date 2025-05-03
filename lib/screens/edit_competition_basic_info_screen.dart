@@ -620,9 +620,10 @@ class _EditCompetitionBasicInfoScreenState
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(top: 16, bottom: 8),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.05),
+                        color: Colors.blue.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        border: Border.all(
+                            color: Colors.blue.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         children: [
@@ -815,8 +816,8 @@ class _EditCompetitionBasicInfoScreenState
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               elevation: 2,
-                              shadowColor:
-                                  const Color(0xFF0A0E53).withOpacity(0.4),
+                              shadowColor: const Color(0xFF0A0E53)
+                                  .withValues(alpha: 0.4),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -880,7 +881,7 @@ class _EditCompetitionBasicInfoScreenState
             ),
             if (_isLoading)
               Container(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 child: const Center(
                   child: CircularProgressIndicator(),
                 ),

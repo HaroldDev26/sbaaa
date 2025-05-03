@@ -11,6 +11,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../resources/auth_methods.dart';
 import '../models/user.dart';
 import 'package:uuid/uuid.dart';
+import '../utils/age_group_handler.dart';
 
 class CreateCompetitionScreen extends StatefulWidget {
   final CompetitionModel? competition; // 若為編輯模式則傳入現有比賽
@@ -42,8 +43,7 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
 
   DateTime? _startDate;
   DateTime? _endDate;
-  String _status = '計劃中';
-  String? _targetAudience;
+  String _targetAudience = '公開'; // 設定默認值
   List<String> _events = [];
   List<Map<String, dynamic>> _ageGroups = [];
   bool _isLoading = false;
@@ -107,8 +107,6 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
       _endDateController.text = competition.endDate;
     }
 
-    _status = competition.status;
-
     // 載入公開對象
     if (competition.metadata != null &&
         competition.metadata!.containsKey('targetAudience')) {
@@ -122,70 +120,10 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
     }
 
     // 載入年齡分組
-    if (competition.metadata != null &&
-        competition.metadata!.containsKey('ageGroups')) {
-      var sourceAgeGroups = competition.metadata!['ageGroups'];
-      _ageGroups = [];
-
-      // 轉換各種可能的輸入格式為統一的Map格式
-      if (sourceAgeGroups is List) {
-        for (var group in sourceAgeGroups) {
-          if (group is Map) {
-            _ageGroups.add(Map<String, dynamic>.from(group));
-          } else if (group is String) {
-            // 處理字符串格式
-            String name = "未命名組別";
-            int? startAge;
-            int? endAge;
-
-            if (group.contains(":")) {
-              final parts = group.split(":");
-              name = parts[0].trim();
-              final ageRange = parts[1].trim();
-              final ageParts = ageRange.replaceAll('歲', '').split('-');
-              if (ageParts.length == 2) {
-                try {
-                  startAge = int.parse(ageParts[0]);
-                  endAge = int.parse(ageParts[1]);
-                } catch (e) {
-                  // 解析失敗時保持默認值
-                }
-              }
-            } else {
-              // 嘗試解析簡單格式 "7-9歲"
-              final parts = group.replaceAll('歲', '').split('-');
-              if (parts.length == 2) {
-                try {
-                  startAge = int.parse(parts[0]);
-                  endAge = int.parse(parts[1]);
-                } catch (e) {
-                  // 解析失敗時保持默認值
-                }
-              }
-            }
-
-            _ageGroups
-                .add({'name': name, 'startAge': startAge, 'endAge': endAge});
-          }
-        }
-      }
-
-      // 格式化顯示文本
-      List<String> displayGroups = [];
-      for (var group in _ageGroups) {
-        final name = group['name'] ?? '未命名組別';
-        final startAge = group['startAge'];
-        final endAge = group['endAge'];
-
-        if (startAge != null && endAge != null) {
-          displayGroups.add("$name ($startAge-$endAge歲)");
-        } else {
-          displayGroups.add(name);
-        }
-      }
-
-      _ageGroupsController.text = displayGroups.join('\n');
-    }
+    final ageGroups =
+        AgeGroupHandler.loadAgeGroupsFromMetadata(competition.metadata);
+    final displayText = AgeGroupHandler.convertAgeGroupsToDisplay(ageGroups);
+    _ageGroupsController.text = displayText;
   }
 
   // 加載當前登錄用戶信息
@@ -210,102 +148,104 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
 
       // 檢查數據庫路徑
       final dbPath = await compManager.getDatabasePath();
-      print('💾 SQLite 數據庫路徑：$dbPath');
+      debugPrint('💾 SQLite 數據庫路徑：$dbPath');
 
       // 檢查DatabaseHelper的路徑
       final dbHelperPath = await DatabaseHelper().getDatabasePath();
-      print('💾 DatabaseHelper 數據庫路徑：$dbHelperPath');
+      debugPrint('💾 DatabaseHelper 數據庫路徑：$dbHelperPath');
 
       if (dbPath != dbHelperPath) {
-        print('⚠️ 警告：CompetitionManager 和 DatabaseHelper 使用的數據庫路徑不同！');
+        debugPrint('⚠️ 警告：CompetitionManager 和 DatabaseHelper 使用的數據庫路徑不同！');
       } else {
-        print('✅ 確認：兩個類使用相同的數據庫路徑');
+        debugPrint('✅ 確認：兩個類使用相同的數據庫路徑');
       }
 
       // 全面檢查數據庫結構
       try {
         final dbStructure = await compManager.checkDatabaseStructure();
-        print('📘 數據庫結構檢查結果:');
-        print('  • 路徑: ${dbStructure['db_path']}');
-        print('  • 表數量: ${(dbStructure['tables'] as List).length}');
-        print('  • 表列表: ${dbStructure['tables']}');
-        print('  • Competitions表結構: ${dbStructure['competitions_schema']}');
-        print('  • Competitions表記錄數: ${dbStructure['competitions_count']}');
-        print('  • 測試查詢結果: ${dbStructure['test_query_count']}');
+        debugPrint('📘 數據庫結構檢查結果:');
+        debugPrint('  • 路徑: ${dbStructure['db_path']}');
+        debugPrint('  • 表數量: ${(dbStructure['tables'] as List).length}');
+        debugPrint('  • 表列表: ${dbStructure['tables']}');
+        debugPrint(
+            '  • Competitions表結構: ${dbStructure['competitions_schema']}');
+        debugPrint(
+            '  • Competitions表記錄數: ${dbStructure['competitions_count']}');
+        debugPrint('  • 測試查詢結果: ${dbStructure['test_query_count']}');
 
         if (dbStructure.containsKey('first_record') &&
             dbStructure['first_record'] != null) {
-          print('  • 第一筆記錄: ${dbStructure['first_record']}');
+          debugPrint('  • 第一筆記錄: ${dbStructure['first_record']}');
         } else {
-          print('  • 沒有記錄');
+          debugPrint('  • 沒有記錄');
         }
       } catch (structureError) {
-        print('❌ 數據庫結構檢查失敗: $structureError');
+        debugPrint('❌ 數據庫結構檢查失敗: $structureError');
       }
 
       // 檢查數據表結構
       try {
         final schema =
             await compManager.rawQuery('PRAGMA table_info(competitions)');
-        print('🧱 SQLite competitions表結構: $schema');
+        debugPrint('🧱 SQLite competitions表結構: $schema');
       } catch (schemaError) {
-        print('❌ 查詢表結構失敗: $schemaError');
+        debugPrint('❌ 查詢表結構失敗: $schemaError');
       }
 
       // 執行原始SQL查詢所有數據
       try {
         final allData =
             await compManager.rawQuery('SELECT * FROM competitions');
-        print('📑 原始查詢所有數據 (${allData.length}筆):');
+        debugPrint('📑 原始查詢所有數據 (${allData.length}筆):');
         for (int i = 0; i < allData.length; i++) {
-          print('- 數據 #${i + 1}: ${allData[i]}');
+          debugPrint('- 數據 #${i + 1}: ${allData[i]}');
         }
       } catch (queryError) {
-        print('❌ 原始查詢失敗: $queryError');
+        debugPrint('❌ 原始查詢失敗: $queryError');
       }
 
       // 獲取所有比賽數據
       final competitions = await compManager.getAllCompetitions();
-      print('📦 SQLite 數據庫中有 ${competitions.length} 筆比賽資料');
+      debugPrint('📦 SQLite 數據庫中有 ${competitions.length} 筆比賽資料');
 
       // 如果有數據，打印所有數據
       if (competitions.isNotEmpty) {
-        print('📋 SQLite 中的所有比賽資料:');
+        debugPrint('📋 SQLite 中的所有比賽資料:');
         for (int i = 0; i < competitions.length; i++) {
-          print('比賽 #${i + 1}: ${competitions[i].toMap()}');
+          debugPrint('比賽 #${i + 1}: ${competitions[i].toMap()}');
         }
       } else {
-        print('⚠️ SQLite 數據庫中沒有比賽資料');
+        debugPrint('⚠️ SQLite 數據庫中沒有比賽資料');
       }
 
       // 檢查表計數
       try {
         final count = await compManager.getCompetitionCount();
-        print('📊 SQLite count查詢結果: $count 筆資料');
+        debugPrint('📊 SQLite count查詢結果: $count 筆資料');
 
         if (count != competitions.length) {
-          print(
+          debugPrint(
               '⚠️ 警告：count查詢結果 ($count) 與獲取到的資料數量 (${competitions.length}) 不一致！');
         }
       } catch (queryError) {
-        print('❌ 執行count查詢失敗: $queryError');
+        debugPrint('❌ 執行count查詢失敗: $queryError');
       }
 
       // 檢查CompetitionData中的數據
       try {
         final compData = CompetitionData();
         final memoryComps = compData.competitions;
-        print('🧠 記憶體中的比賽數量: ${memoryComps.length}');
+        debugPrint('🧠 記憶體中的比賽數量: ${memoryComps.length}');
 
         if (memoryComps.isNotEmpty) {
-          print('📋 記憶體中第一筆比賽: ${memoryComps.first.toMap()}');
+          debugPrint('📋 記憶體中第一筆比賽: ${memoryComps.first.toMap()}');
         }
       } catch (memoryError) {
-        print('❌ 檢查記憶體數據失敗: $memoryError');
+        debugPrint('❌ 檢查記憶體數據失敗: $memoryError');
       }
     } catch (e, stackTrace) {
-      print('❌ 驗證SQLite數據失敗: $e');
-      print(stackTrace);
+      debugPrint('❌ 驗證SQLite數據失敗: $e');
+      debugPrint(stackTrace.toString());
     }
   }
 
@@ -442,23 +382,10 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
     // 初始化年齡分組數據
     if (initialGroups.isNotEmpty) {
       for (var group in initialGroups) {
-        String name = "未命名";
-        int? startAge;
-        int? endAge;
-
-        // 處理帶名稱的格式 "名稱: 7-9歲"
-        if (group.containsKey('name')) {
-          name = group['name'];
-        }
-        if (group.containsKey('startAge')) {
-          startAge = group['startAge'];
-        }
-        if (group.containsKey('endAge')) {
-          endAge = group['endAge'];
-        }
-
+        String name = group['name'] ?? "未命名";
+        int? startAge = group['startAge'];
+        int? endAge = group['endAge'];
         ageGroups.add({'name': name, 'startAge': startAge, 'endAge': endAge});
-        // 為每個組別創建對應的控制器
         nameControllers.add(TextEditingController(text: name));
         startAgeControllers
             .add(TextEditingController(text: startAge?.toString() ?? ''));
@@ -466,8 +393,6 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
             .add(TextEditingController(text: endAge?.toString() ?? ''));
       }
     }
-
-    // 如果沒有分組，添加一個默認的空分組
     if (ageGroups.isEmpty) {
       ageGroups.add({'name': '未命名', 'startAge': null, 'endAge': null});
       nameControllers.add(TextEditingController(text: '未命名'));
@@ -477,7 +402,45 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
 
     return StatefulBuilder(
       builder: (context, setState) {
-        // 添加組別的函數，確保同時創建控制器
+        // 檢查重複名稱或年齡範圍重疊
+        String? validateGroups() {
+          final names = <String>{};
+          for (var group in ageGroups) {
+            if (group['name'] == null ||
+                group['name'].toString().trim().isEmpty) {
+              return '每個組別都需要名稱';
+            }
+            if (names.contains(group['name'])) {
+              return '組別名稱不能重複';
+            }
+            names.add(group['name']);
+            if (group['startAge'] == null || group['endAge'] == null) {
+              return '每個組別都需要起始和結束年齡';
+            }
+            if (group['startAge'] > group['endAge']) {
+              return '起始年齡不能大於結束年齡';
+            }
+          }
+          // 檢查年齡範圍重疊
+          for (int i = 0; i < ageGroups.length; i++) {
+            for (int j = i + 1; j < ageGroups.length; j++) {
+              final a = ageGroups[i];
+              final b = ageGroups[j];
+              if (a['startAge'] != null &&
+                  a['endAge'] != null &&
+                  b['startAge'] != null &&
+                  b['endAge'] != null) {
+                if (!(a['endAge'] < b['startAge'] ||
+                    a['startAge'] > b['endAge'])) {
+                  return '年齡範圍不能重疊（${a['name']} 與 ${b['name']}）';
+                }
+              }
+            }
+          }
+          return null;
+        }
+
+        // 添加組別的函數
         void addAgeGroup() {
           setState(() {
             ageGroups.add({'name': '未命名', 'startAge': null, 'endAge': null});
@@ -487,10 +450,9 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
           });
         }
 
-        // 刪除組別的函數，確保同時刪除控制器，但不允許刪除最後一個組別
+        // 刪除組別的函數
         void removeAgeGroup(int index) {
           if (ageGroups.length > 1) {
-            // 至少保留一個組別
             setState(() {
               ageGroups.removeAt(index);
               nameControllers.removeAt(index);
@@ -498,7 +460,6 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
               endAgeControllers.removeAt(index);
             });
           } else {
-            // 顯示提示，不能刪除最後一個組別
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('至少需要保留一個年齡組別'),
@@ -508,18 +469,18 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
           }
         }
 
+        // UI
         return AlertDialog(
           title: const Text('設定年齡分組'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('請為每個年齡組別設定名稱、起始和結束年齡'),
+                const Text('請為每個年齡組別設定名稱、起始和結束年齡（不能重複、不能重疊）'),
                 const SizedBox(height: 16),
                 ...ageGroups.asMap().entries.map((entry) {
                   final index = entry.key;
                   final group = entry.value;
-
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12.0),
                     elevation: 2,
@@ -530,11 +491,9 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
                         children: [
                           Row(
                             children: [
-                              Text(
-                                '組別 ${index + 1}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
+                              Text('組別 ${index + 1}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold)),
                               const Spacer(),
                               IconButton(
                                 icon:
@@ -555,7 +514,7 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
                             controller: nameControllers[index],
                             onChanged: (value) {
                               setState(() {
-                                ageGroups[index]['name'] = value;
+                                ageGroups[index]['name'] = value.trim();
                               });
                             },
                           ),
@@ -572,14 +531,10 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
                                   keyboardType: TextInputType.number,
                                   controller: startAgeControllers[index],
                                   onChanged: (value) {
-                                    if (value.isNotEmpty) {
-                                      try {
-                                        setState(() {
-                                          ageGroups[index]['startAge'] =
-                                              int.parse(value);
-                                        });
-                                      } catch (_) {}
-                                    }
+                                    setState(() {
+                                      int? v = int.tryParse(value);
+                                      ageGroups[index]['startAge'] = v;
+                                    });
                                   },
                                 ),
                               ),
@@ -596,14 +551,10 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
                                   keyboardType: TextInputType.number,
                                   controller: endAgeControllers[index],
                                   onChanged: (value) {
-                                    if (value.isNotEmpty) {
-                                      try {
-                                        setState(() {
-                                          ageGroups[index]['endAge'] =
-                                              int.parse(value);
-                                        });
-                                      } catch (_) {}
-                                    }
+                                    setState(() {
+                                      int? v = int.tryParse(value);
+                                      ageGroups[index]['endAge'] = v;
+                                    });
                                   },
                                 ),
                               ),
@@ -620,9 +571,8 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                '預覽: ${group['name']} (${group['startAge']}-${group['endAge']}歲)',
-                                style: const TextStyle(color: Colors.blue),
-                              ),
+                                  '預覽: ${group['name']} (${group['startAge']}-${group['endAge']}歲)',
+                                  style: const TextStyle(color: Colors.blue)),
                             ),
                         ],
                       ),
@@ -641,6 +591,21 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
                   ),
                   onPressed: addAgeGroup,
                 ),
+                const SizedBox(height: 8),
+                // 錯誤提示
+                Builder(
+                  builder: (context) {
+                    final error = validateGroups();
+                    if (error != null) {
+                      return Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(error,
+                            style: const TextStyle(color: Colors.red)),
+                      );
+                    }
+                    return const SizedBox();
+                  },
+                ),
               ],
             ),
           ),
@@ -651,37 +616,28 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
             ),
             TextButton(
               onPressed: () {
-                // 驗證並轉換年齡分組
-                final List<Map<String, dynamic>> validGroups = [];
-
-                for (var group in ageGroups) {
-                  final name = group['name'];
-                  final startAge = group['startAge'];
-                  final endAge = group['endAge'];
-
-                  if (name != null &&
-                      name.isNotEmpty &&
-                      startAge != null &&
-                      endAge != null) {
-                    validGroups.add({
-                      'name': name,
-                      'startAge': startAge,
-                      'endAge': endAge,
-                    });
-                  }
-                }
-
-                // 檢查是否至少有一個有效組別
-                if (validGroups.isEmpty) {
+                final error = validateGroups();
+                if (error != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('請至少填寫一個完整的年齡組別'),
-                      duration: Duration(seconds: 2),
-                    ),
+                    SnackBar(
+                        content: Text(error),
+                        duration: const Duration(seconds: 2)),
                   );
                   return;
                 }
-
+                // 過濾有效組別
+                final validGroups = ageGroups
+                    .where((g) =>
+                        g['name'] != null &&
+                        g['name'].toString().isNotEmpty &&
+                        g['startAge'] != null &&
+                        g['endAge'] != null)
+                    .map((g) => {
+                          'name': g['name'],
+                          'startAge': g['startAge'],
+                          'endAge': g['endAge'],
+                        })
+                    .toList();
                 Navigator.pop(context, validGroups);
               },
               child: const Text('確定'),
@@ -724,7 +680,7 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
       try {
         // 使用已加載的_currentUser或回退到Firebase Auth
         final String uid = _currentUser?.uid ?? _auth.currentUser?.uid ?? "";
-        final String createdBy = _currentUser?.username ?? '未知用戶';
+        final String createdBy = _currentUser?.username ?? 'unknown';
         final String email =
             _currentUser?.email ?? _auth.currentUser?.email ?? "";
 
@@ -753,27 +709,26 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
           'venue': _venueController.text.trim(),
           'startDate': _startDateController.text,
           'endDate': _endDateController.text,
-          'status': _status,
+          'status': '比賽',
           'createdBy': createdBy,
-          'createdByUid': uid, // 明確存儲創建者UID
+          'createdByUid': uid,
           'createdAt': now.toIso8601String(),
           'metadata': {
             'targetAudience': _targetAudience,
-            'maxParticipants': 100,
-            'currentParticipants': 0,
-            'events': _events.map((e) => {'name': e, 'status': '計劃中'}).toList(),
-            'ageGroups': ageGroupsForSubmit, // 使用格式化後的年齡組別
-            'createdByUid': uid, // 在metadata中也保存創建者UID以便查詢
-            'owner': {
-              'uid': uid,
-              'username': createdBy,
-              'email': email,
-            }
+            'registration_form_created': false,
+            'age_groups': _ageGroups,
+          },
+          'events': _events.map((e) => {'name': e, 'status': '比賽'}).toList(),
+          'createdByUid': uid,
+          'owner': {
+            'uid': uid,
+            'username': createdBy,
+            'email': email,
           },
           'permissions': {
             'owner': uid,
             'canEdit': [uid],
-            'canDelete': [uid], // 只有創建者可以刪除
+            'canDelete': [uid],
             'canManage': [uid]
           }
         };

@@ -140,7 +140,7 @@ class CompetitionModel {
       venue: data['venue'],
       startDate: startDate,
       endDate: endDate,
-      status: data['status'] ?? '計劃中',
+      status: '比賽',
       createdBy: data['createdBy'] ?? '未知',
       createdByUid: data['createdByUid'] ?? '',
       createdAt: createdAt.toDate().toString(),
@@ -248,7 +248,7 @@ class CompetitionModel {
       venue: map['venue'],
       startDate: startDate,
       endDate: endDate,
-      status: map['status'] ?? '計劃中',
+      status: '比賽',
       createdBy: map['createdBy'] ?? '未知',
       createdByUid: map['createdByUid'] ?? '',
       createdAt: createdAt.toDate().toString(),
@@ -273,7 +273,7 @@ class CompetitionModel {
       'venue': venue,
       'startDate': startDate,
       'endDate': endDate,
-      'status': status,
+      'status': '比賽',
       'createdBy': createdBy,
       'createdByUid': createdByUid,
       'createdAt': createdAt,
@@ -364,16 +364,7 @@ class CompetitionModel {
 
   // 根據狀態獲取顯示顏色
   String get statusColor {
-    switch (status) {
-      case '計劃中':
-        return '#2196F3'; // 藍色
-      case '進行中':
-        return '#4CAF50'; // 綠色
-      case '已結束':
-        return '#F44336'; // 紅色
-      default:
-        return '#9E9E9E'; // 灰色
-    }
+    return '#2196F3'; // 藍色 (默認顏色)
   }
 
   // 複製並更新部分屬性
@@ -405,7 +396,7 @@ class CompetitionModel {
       venue: venue ?? this.venue,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
-      status: status ?? this.status,
+      status: '比賽',
       createdBy: createdBy ?? this.createdBy,
       createdByUid: createdByUid ?? this.createdByUid,
       createdAt: createdAt ?? this.createdAt,

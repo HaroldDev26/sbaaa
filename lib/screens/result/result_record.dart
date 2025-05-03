@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'track_event_timer_screen.dart';
 import 'field_event_record_screen.dart';
 import 'event_result_screen.dart';
@@ -22,6 +23,7 @@ class ResultRecordScreen extends StatefulWidget {
 class _ResultRecordScreenState extends State<ResultRecordScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isLoading = true;
   List<Map<String, dynamic>> _events = [];
@@ -476,9 +478,19 @@ class _ResultRecordScreenState extends State<ResultRecordScreen>
 
   @override
   Widget build(BuildContext context) {
-    // 獲取螢幕尺寸，用於響應式佈局
-    final screenSize = MediaQuery.of(context).size;
-    final isSmallScreen = screenSize.width < 400 || screenSize.height < 600;
+    final size = MediaQuery.of(context).size;
+    final isSmallScreen = size.width < 600;
+
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('${widget.competitionName} - 成績紀錄'),
+          backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+          elevation: 0,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -487,6 +499,8 @@ class _ResultRecordScreenState extends State<ResultRecordScreen>
           style: TextStyle(fontSize: isSmallScreen ? 16 : 20),
           overflow: TextOverflow.ellipsis,
         ),
+        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+        elevation: 0,
         bottom: TabBar(
           controller: _tabController,
           tabs: _eventTypes.map((type) => Tab(text: type)).toList(),

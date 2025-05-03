@@ -28,7 +28,7 @@ class _CharacterManagementScreenState extends State<CharacterManagementScreen> {
     {
       'field': 'registration',
       'name': '報名管理員',
-      'description': '管理參賽者報名與檢錄',
+      'description': '管理參賽者報名',
       'icon': Icons.app_registration,
       'color': Colors.teal,
     },
@@ -217,7 +217,7 @@ class _CharacterManagementScreenState extends State<CharacterManagementScreen> {
               child: Container(
                 width: 60,
                 height: 60,
-                color: primaryColor.withOpacity(0.1),
+                color: primaryColor.withValues(alpha: 0.1),
                 child: const Icon(Icons.emoji_events,
                     color: primaryColor, size: 32),
               ),
@@ -321,7 +321,7 @@ class _CharacterManagementScreenState extends State<CharacterManagementScreen> {
       try {
         roleMembers = List<String>.from(permissions[permissionField] ?? []);
       } catch (e) {
-        print('⚠️ 轉換角色成員列表出錯: $e');
+        debugPrint('⚠️ 轉換角色成員列表出錯: $e');
       }
     }
 
@@ -438,8 +438,8 @@ class _CharacterManagementScreenState extends State<CharacterManagementScreen> {
                   onPressed: () =>
                       _addRoleMember(permissionField, role['name']),
                   style: ButtonStyle(
-                    overlayColor:
-                        WidgetStateProperty.all(themeColor.withOpacity(0.1)),
+                    overlayColor: WidgetStateProperty.all(
+                        themeColor.withValues(alpha: 0.1)),
                   ),
                 ),
               ],
@@ -460,7 +460,7 @@ class _CharacterManagementScreenState extends State<CharacterManagementScreen> {
           return ListTile(
             leading: CircleAvatar(
               radius: 18,
-              backgroundColor: themeColor.withOpacity(0.2),
+              backgroundColor: themeColor.withValues(alpha: 0.2),
               child: const CircularProgressIndicator(strokeWidth: 2),
             ),
             title: Container(height: 14, width: 100, color: Colors.grey[200]),
@@ -495,7 +495,7 @@ class _CharacterManagementScreenState extends State<CharacterManagementScreen> {
         return ListTile(
           leading: CircleAvatar(
             radius: 18,
-            backgroundColor: themeColor.withOpacity(0.2),
+            backgroundColor: themeColor.withValues(alpha: 0.2),
             backgroundImage:
                 profileImage != null ? NetworkImage(profileImage) : null,
             child: profileImage == null

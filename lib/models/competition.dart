@@ -8,7 +8,7 @@ class CompetitionModel {
   final String? venue; // 比賽場地
   final String startDate;
   final String endDate;
-  final String status; // 狀態：計劃中、進行中、已結束等
+  final String status; // 比賽狀態
   final String createdBy;
   final String createdByUid; // 添加創建者UID
   final String createdAt;
@@ -79,7 +79,7 @@ class CompetitionModel {
       venue: map['venue'],
       startDate: map['startDate'] ?? '',
       endDate: map['endDate'] ?? '',
-      status: map['status'] ?? '計劃中',
+      status: '比賽', // 固定使用默認值
       createdBy: map['createdBy'] ?? '未知',
       createdByUid: map['createdByUid'] ?? '', // 從map中獲取創建者UID
       createdAt: map['createdAt'] ?? DateTime.now().toIso8601String(),
@@ -121,7 +121,7 @@ class CompetitionModel {
       'venue': venue,
       'startDate': startDate,
       'endDate': endDate,
-      'status': status,
+      'status': '比賽', // 固定使用默認值
       'createdBy': createdBy,
       'createdByUid': createdByUid, // 加入創建者UID
       'createdAt': createdAt,
@@ -168,7 +168,7 @@ class CompetitionModel {
       venue: venue ?? this.venue,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
-      status: status ?? this.status,
+      status: '比賽', // 固定使用默認值
       createdBy: createdBy ?? this.createdBy,
       createdByUid: createdByUid ?? this.createdByUid,
       createdAt: createdAt ?? this.createdAt,
@@ -375,6 +375,6 @@ class CompetitionModel {
 
   @override
   String toString() {
-    return 'CompetitionModel{id: $id, name: $name, status: $status}';
+    return 'CompetitionModel{id: $id, name: $name}';
   }
 }

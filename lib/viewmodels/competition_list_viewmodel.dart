@@ -163,11 +163,8 @@ class CompetitionListViewModel extends ChangeNotifier {
       final matchesQuery =
           competition.name.toLowerCase().contains(_searchQuery);
 
-      // 檢查狀態是否匹配所選過濾器
-      final matchesFilter =
-          _statusFilter == '全部' || competition.status == _statusFilter;
-
-      return matchesQuery && matchesFilter;
+      // 不再檢查狀態過濾
+      return matchesQuery;
     }).toList();
   }
 
@@ -239,17 +236,13 @@ class CompetitionListViewModel extends ChangeNotifier {
     List<CompetitionModel> ageFilteredCompetitions =
         getCompetitionsSuitableForAge(age);
 
-    // 現在將這些比賽設置為過濾後的結果，但仍然需要應用搜索和狀態過濾
+    // 現在將這些比賽設置為過濾後的結果，但仍然需要應用搜索過濾
     _filteredCompetitions = ageFilteredCompetitions.where((competition) {
       // 檢查名稱是否包含搜索關鍵詞
       final matchesQuery =
           competition.name.toLowerCase().contains(_searchQuery);
 
-      // 檢查狀態是否匹配所選過濾器
-      final matchesFilter =
-          _statusFilter == '全部' || competition.status == _statusFilter;
-
-      return matchesQuery && matchesFilter;
+      return matchesQuery;
     }).toList();
 
     notifyListeners();

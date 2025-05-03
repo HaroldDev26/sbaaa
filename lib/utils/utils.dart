@@ -1,4 +1,5 @@
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart';
 
 pickImage(ImageSource source) async {
   final ImagePicker imagePicker = ImagePicker();
@@ -23,7 +24,7 @@ int? calculateAge(dynamic birthday) {
     try {
       birthDate = DateTime.parse(birthday);
     } catch (e) {
-      print('解析生日出錯: $e');
+      debugPrint('解析生日出錯: $e');
       return null;
     }
   }

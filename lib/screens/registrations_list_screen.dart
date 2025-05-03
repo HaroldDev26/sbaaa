@@ -790,6 +790,7 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
       // 使用try-catch確保對話框可以正確關閉
       try {
         // 確認成功後，顯示載入指示器
+        if (!mounted) return;
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -840,9 +841,11 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
         }
 
         // 確保載入對話框已關閉
+        if (!mounted) return;
         Navigator.of(context, rootNavigator: true).pop();
 
         // 更新本地數據
+        if (!mounted) return;
         setState(() {
           final index =
               _registrations.indexWhere((r) => r['id'] == registrationId);
@@ -858,21 +861,22 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
         });
 
         // 關閉詳情對話框
+        if (!mounted) return;
         Navigator.of(context, rootNavigator: true).pop();
 
         // 顯示成功信息
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('已${newStatus == 'approved' ? '核准' : '拒絕'}報名'),
-              backgroundColor:
-                  newStatus == 'approved' ? Colors.green : Colors.red,
-            ),
-          );
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已${newStatus == 'approved' ? '核准' : '拒絕'}報名'),
+            backgroundColor:
+                newStatus == 'approved' ? Colors.green : Colors.red,
+          ),
+        );
       } catch (dialogError) {
         // 確保在出錯時所有對話框都被關閉
         try {
+          if (!mounted) return;
           Navigator.of(context, rootNavigator: true).pop();
         } catch (e) {
           debugPrint('關閉載入對話框出錯: $e');
@@ -884,48 +888,45 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
 
       // 確保對話框被關閉
       try {
+        if (!mounted) return;
         Navigator.of(context, rootNavigator: true).pop();
       } catch (navError) {
         debugPrint('關閉對話框出錯: $navError');
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('更新狀態失敗: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('更新狀態失敗: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
   // 將核准的報名資料儲存到比賽專屬的集合中
   Future<void> _saveToCompetitionCollection(
       Map<String, dynamic> registration) async {
-    // 在異步操作前先獲取 BuildContext
-    final context = this.context;
-
     try {
       // 顯示載入指示器
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => const SimpleDialog(
-            contentPadding: EdgeInsets.all(16),
-            children: [
-              Row(
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(width: 16),
-                  Text("儲存中...", style: TextStyle(fontSize: 16)),
-                ],
-              ),
-            ],
-          ),
-        );
-      }
+      if (!mounted) return; // 添加 mounted 檢查
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const SimpleDialog(
+          contentPadding: EdgeInsets.all(16),
+          children: [
+            Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Text("儲存中...", style: TextStyle(fontSize: 16)),
+              ],
+            ),
+          ],
+        ),
+      );
 
       // 安全提取必要的資料，避免空值和型別錯誤
       final String competitionId =
@@ -935,9 +936,8 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
       // 檢查必要欄位
       if (competitionId.isEmpty || userId.isEmpty) {
         debugPrint('無法儲存到比賽專屬集合: 缺少必要的competitionId或userId');
-        if (mounted) {
-          Navigator.of(context, rootNavigator: true).pop(); // 關閉載入對話框
-        }
+        if (!mounted) return;
+        Navigator.of(context, rootNavigator: true).pop(); // 關閉載入對話框
         return;
       }
 
@@ -1041,30 +1041,27 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
       });
 
       debugPrint('成功將運動員資料儲存到比賽專屬集合: $collectionName');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('核准成功，運動員資料已加入比賽'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('核准成功，運動員資料已加入比賽'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       debugPrint('儲存到比賽專屬集合失敗: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('儲存運動員資料失敗: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('儲存運動員資料失敗: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       // 確保對話框被關閉
       try {
-        if (mounted) {
-          Navigator.of(context, rootNavigator: true).pop();
-        }
+        if (!mounted) return;
+        Navigator.of(context, rootNavigator: true).pop();
       } catch (e) {
         debugPrint('關閉對話框出錯: $e');
       }
@@ -1166,7 +1163,7 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _getStatusColor(status).withOpacity(0.1),
+                      color: _getStatusColor(status).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: _getStatusColor(status)),
                     ),
@@ -1251,7 +1248,8 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
                                 materialTapTargetSize:
                                     MaterialTapTargetSize.shrinkWrap,
                                 labelStyle: const TextStyle(fontSize: 12),
-                                backgroundColor: Colors.blue.withOpacity(0.1),
+                                backgroundColor:
+                                    Colors.blue.withValues(alpha: 0.1),
                               ))
                           .toList(),
                     ),
@@ -1920,6 +1918,7 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
   // 批量核准選擇的運動員
   Future<void> _batchApproveAthletes() async {
     if (_selectedAthletes.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('請先選擇要核准的運動員')),
       );
@@ -1947,6 +1946,9 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
     );
 
     if (confirm != true) return;
+
+    // 檢查組件是否仍然掛載
+    if (!mounted) return;
 
     // 顯示進度對話框
     showDialog<void>(
@@ -2046,12 +2048,14 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
       }
 
       // 關閉進度對話框
+      if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
 
       // 刷新列表
       await _loadRegistrations();
 
       // 清空選擇
+      if (!mounted) return;
       setState(() {
         _selectedAthletes.clear();
         _selectAllMode = false; // 完成後退出選擇模式
@@ -2067,6 +2071,7 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
             '已核准 $successCount 名運動員，但有 ${failedAthletes.length} 名運動員處理失敗';
       }
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(resultMessage),
@@ -2110,9 +2115,11 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
       );
     } catch (e) {
       // 關閉進度對話框
+      if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
 
       // 顯示錯誤
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('批量處理時發生錯誤: $e'),

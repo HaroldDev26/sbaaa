@@ -136,25 +136,12 @@ class CompetitionCardWidget extends StatelessWidget {
 
   // 構建頭部背景
   Widget _buildHeader() {
-    Color statusColor;
-    switch (competition.status) {
-      case '計劃中':
-        statusColor = Colors.blue;
-        break;
-      case '進行中':
-        statusColor = Colors.green;
-        break;
-      case '已結束':
-        statusColor = Colors.red;
-        break;
-      default:
-        statusColor = Colors.grey;
-    }
+    Color statusColor = Colors.blue; // 使用默認顏色
 
     return Container(
       height: 80,
       decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.7),
+        color: statusColor.withValues(alpha: 0.7),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(12),
           topRight: Radius.circular(12),
@@ -164,24 +151,24 @@ class CompetitionCardWidget extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // 左側：狀態
+          // 左側：標題
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.3),
+              color: Colors.white.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
+            child: const Row(
               children: [
                 Icon(
-                  _getStatusIcon(competition.status),
+                  Icons.event,
                   size: 16,
                   color: Colors.white,
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: 6),
                 Text(
-                  competition.status,
-                  style: const TextStyle(
+                  "比賽",
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
@@ -196,8 +183,8 @@ class CompetitionCardWidget extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: competition.isDeadlinePassed
-                    ? Colors.red.withOpacity(0.3)
-                    : Colors.green.withOpacity(0.3),
+                    ? Colors.red.withValues(alpha: 0.3)
+                    : Colors.green.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
@@ -239,20 +226,6 @@ class CompetitionCardWidget extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  // 獲取狀態對應的圖標
-  IconData _getStatusIcon(String status) {
-    switch (status) {
-      case '計劃中':
-        return Icons.event_available;
-      case '進行中':
-        return Icons.play_circle_fill;
-      case '已結束':
-        return Icons.event_busy;
-      default:
-        return Icons.help_outline;
-    }
   }
 
   // 格式化日期

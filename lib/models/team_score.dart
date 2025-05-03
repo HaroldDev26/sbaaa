@@ -1,27 +1,68 @@
 import 'event_result.dart';
+import 'medal_type.dart';
 
 class TeamScore {
-  final String teamId;
-  final String teamName;
-  final String? school;
-  final int totalScore;
-  final List<Medal> medals;
-  final Map<String, int> eventScores; // 各項目得分
+  final String school; // 學校/團隊名稱
+  final Map<String, int> medalCounts; // 獎牌數量統計
+  final Map<String, int> pointsByEvent; // 每項目的得分
+  int totalPoints; // 總得分 - 移除 final 關鍵字以允許修改
 
   TeamScore({
-    required this.teamId,
-    required this.teamName,
-    this.school,
-    required this.totalScore,
-    required this.medals,
-    required this.eventScores,
+    required this.school,
+    required this.medalCounts,
+    required this.pointsByEvent,
+    required this.totalPoints,
   });
+
+  // 工廠方法 - 從JSON創建
+  factory TeamScore.fromJson(Map<String, dynamic> json) {
+    return TeamScore(
+      school: json['school'] ?? '未知學校',
+      medalCounts: Map<String, int>.from(json['medalCounts'] ?? {}),
+      pointsByEvent: Map<String, int>.from(json['pointsByEvent'] ?? {}),
+      totalPoints: json['totalPoints'] ?? 0,
+    );
+  }
+
+  // 轉換為JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'school': school,
+      'medalCounts': medalCounts,
+      'pointsByEvent': pointsByEvent,
+      'totalPoints': totalPoints,
+    };
+  }
+
+  // 創建副本並更新數據
+  TeamScore copyWith({
+    String? school,
+    Map<String, int>? medalCounts,
+    Map<String, int>? pointsByEvent,
+    int? totalPoints,
+  }) {
+    return TeamScore(
+      school: school ?? this.school,
+      medalCounts: medalCounts ?? Map<String, int>.from(this.medalCounts),
+      pointsByEvent: pointsByEvent ?? Map<String, int>.from(this.pointsByEvent),
+      totalPoints: totalPoints ?? this.totalPoints,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'TeamScore{school: $school, totalPoints: $totalPoints, medalCounts: $medalCounts}';
+  }
 
   // 從 Map 創建模型
   factory TeamScore.fromMap(Map<String, dynamic> data) {
-    List<Medal> medals = [];
+    // 移除未使用的medals變數
+    Map<String, int> medalCounts = {};
     if (data['medals'] != null) {
-      medals = (data['medals'] as List).map((m) => Medal.fromMap(m)).toList();
+      for (var medal in data['medals'] as List) {
+        final Medal medalObj = Medal.fromMap(medal);
+        medalCounts[medalTypeToString(medalObj.type)] = medalObj.count;
+      }
     }
 
     Map<String, int> eventScores = {};
@@ -32,12 +73,10 @@ class TeamScore {
     }
 
     return TeamScore(
-      teamId: data['teamId'] ?? '',
-      teamName: data['teamName'] ?? '',
-      school: data['school'],
-      totalScore: data['totalScore'] ?? 0,
-      medals: medals,
-      eventScores: eventScores,
+      school: data['school'] ?? '',
+      medalCounts: medalCounts,
+      pointsByEvent: eventScores,
+      totalPoints: data['totalScore'] ?? 0,
     );
   }
 
@@ -92,62 +131,69 @@ class TeamScore {
 
     // 添加獎牌
     if (goldCount > 0) {
-      medals.add(Medal(type: 'gold', count: goldCount));
+      medals.add(Medal(type: MedalType.gold, count: goldCount));
     }
     if (silverCount > 0) {
-      medals.add(Medal(type: 'silver', count: silverCount));
+      medals.add(Medal(type: MedalType.silver, count: silverCount));
     }
     if (bronzeCount > 0) {
-      medals.add(Medal(type: 'bronze', count: bronzeCount));
+      medals.add(Medal(type: MedalType.bronze, count: bronzeCount));
     }
 
     return TeamScore(
-      teamId: teamId,
-      teamName: teamName,
-      school: school,
-      totalScore: totalScore,
-      medals: medals,
-      eventScores: eventScores,
+      school: school ?? '',
+      medalCounts: {
+        'gold': goldCount,
+        'silver': silverCount,
+        'bronze': bronzeCount,
+      },
+      pointsByEvent: eventScores,
+      totalPoints: totalScore,
     );
   }
 
   // 獲取總獎牌數
   int get totalMedals {
-    return medals.fold(0, (sum, medal) => sum + medal.count);
+    return medalCounts.values.fold(0, (sum, count) => sum + count);
   }
 
   // 獲取金牌數
   int get goldMedals {
-    return medals
-        .where((m) => m.type == 'gold')
-        .fold(0, (sum, medal) => sum + medal.count);
+    return medalCounts['gold'] ?? 0;
   }
 
   // 獲取銀牌數
   int get silverMedals {
-    return medals
-        .where((m) => m.type == 'silver')
-        .fold(0, (sum, medal) => sum + medal.count);
+    return medalCounts['silver'] ?? 0;
   }
 
   // 獲取銅牌數
   int get bronzeMedals {
-    return medals
-        .where((m) => m.type == 'bronze')
-        .fold(0, (sum, medal) => sum + medal.count);
+    return medalCounts['bronze'] ?? 0;
   }
 }
 
 class Medal {
-  final String type; // 'gold', 'silver', 'bronze'
+  final MedalType type; // 使用枚舉代替字符串
   final int count;
 
   Medal({required this.type, required this.count});
 
   factory Medal.fromMap(Map<String, dynamic> data) {
+    // 從字符串轉換為枚舉
+    MedalType medalType = stringToMedalType(data['type'] ?? '');
+
     return Medal(
-      type: data['type'] ?? '',
+      type: medalType,
       count: data['count'] ?? 0,
     );
+  }
+
+  // 轉換為Map
+  Map<String, dynamic> toMap() {
+    return {
+      'type': medalTypeToString(type),
+      'count': count,
+    };
   }
 }

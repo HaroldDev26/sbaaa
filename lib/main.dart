@@ -19,8 +19,7 @@ void main() async {
   // 初始化日誌系統
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
-    // ignore: avoid_print
-    print('${record.level.name}: ${record.time}: ${record.message}');
+    debugPrint('${record.level.name}: ${record.time}: ${record.message}');
   });
 
   final log = Logger('Main');

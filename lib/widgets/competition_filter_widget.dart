@@ -42,9 +42,6 @@ class CompetitionFilterWidget extends StatelessWidget {
             child: Row(
               children: [
                 _buildFilterChip(context, '全部'),
-                _buildFilterChip(context, '計劃中'),
-                _buildFilterChip(context, '進行中'),
-                _buildFilterChip(context, '已結束'),
               ],
             ),
           ),
@@ -69,7 +66,7 @@ class CompetitionFilterWidget extends StatelessWidget {
           }
         },
         backgroundColor: Colors.white,
-        selectedColor: theme.primaryColor.withOpacity(0.2),
+        selectedColor: theme.primaryColor.withValues(alpha: 0.2),
         checkmarkColor: theme.primaryColor,
         labelStyle: TextStyle(
           color: isSelected ? theme.primaryColor : Colors.black,

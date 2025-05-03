@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class RegistrationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -20,7 +21,7 @@ class RegistrationService {
 
       return query.docs.isNotEmpty;
     } catch (e) {
-      print('檢查報名狀態出錯: $e');
+      debugPrint('檢查報名狀態出錯: $e');
       return false;
     }
   }
@@ -48,7 +49,7 @@ class RegistrationService {
 
       return true;
     } catch (e) {
-      print('報名比賽出錯: $e');
+      debugPrint('報名比賽出錯: $e');
       return false;
     }
   }
@@ -73,7 +74,7 @@ class RegistrationService {
 
       return null;
     } catch (e) {
-      print('獲取報名表單出錯: $e');
+      debugPrint('獲取報名表單出錯: $e');
       return null;
     }
   }
@@ -89,7 +90,7 @@ class RegistrationService {
 
       return query.docs.map((doc) => doc.data()).toList();
     } catch (e) {
-      print('獲取比賽報名列表出錯: $e');
+      debugPrint('獲取比賽報名列表出錯: $e');
       return [];
     }
   }

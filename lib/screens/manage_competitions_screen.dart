@@ -22,7 +22,6 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
   List<CompetitionModel> _competitions = [];
   List<CompetitionModel> _filteredCompetitions = [];
   bool _isLoading = true;
-  String _selectedFilter = '全部'; // 預設過濾選項
   int _selectedIndex = 0; // 底部導航欄選中項
 
   @override
@@ -48,9 +47,8 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
     });
 
     try {
-      // 使用數據管理類獲取過濾後的比賽列表
-      final results = await _competitionData.getFilteredCompetitions(
-          query, _selectedFilter);
+      // 使用數據管理類獲取過濾後的比賽列表，傳入空字串作為狀態過濾條件
+      final results = await _competitionData.getFilteredCompetitions(query, '');
 
       setState(() {
         _filteredCompetitions = insertionSort(results);
@@ -67,14 +65,6 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
         );
       }
     }
-  }
-
-  // 根據選擇的篩選條件過濾比賽
-  void _applyFilter(String filter) {
-    setState(() {
-      _selectedFilter = filter;
-      _filterCompetitions();
-    });
   }
 
   // 獲取比賽列表
@@ -258,47 +248,30 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
               primaryColor.blue,
               0.1,
             ),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: '搜索比賽名稱',
-                    prefixIcon: Icon(Icons.search),
-                    fillColor: Colors.white,
-                    filled: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(8)),
-                      borderSide: BorderSide(color: Colors.black, width: 1.0),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(8)),
-                      borderSide: BorderSide(color: Colors.black, width: 1.0),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(8)),
-                      borderSide: BorderSide(color: primaryColor, width: 1.5),
-                    ),
-                  ),
-                  onChanged: (value) {
-                    // 每次輸入變更時執行搜索
-                    _filterCompetitions();
-                  },
+            child: TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                hintText: '搜索比賽名稱',
+                prefixIcon: Icon(Icons.search),
+                fillColor: Colors.white,
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                  borderSide: BorderSide(color: Colors.black, width: 1.0),
                 ),
-                const SizedBox(height: 12),
-                // 過濾選項
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildFilterChip('全部'),
-                      _buildFilterChip('計劃中'),
-                      _buildFilterChip('進行中'),
-                      _buildFilterChip('已結束'),
-                    ],
-                  ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                  borderSide: BorderSide(color: Colors.black, width: 1.0),
                 ),
-              ],
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                  borderSide: BorderSide(color: primaryColor, width: 1.5),
+                ),
+              ),
+              onChanged: (value) {
+                // 每次輸入變更時執行搜索
+                _filterCompetitions();
+              },
             ),
           ),
 
@@ -347,48 +320,10 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
     );
   }
 
-  // 構建過濾選項
-  Widget _buildFilterChip(String label) {
-    final isSelected = _selectedFilter == label;
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (selected) {
-          if (selected) {
-            _applyFilter(label);
-          }
-        },
-        backgroundColor: Colors.white,
-        selectedColor: primaryColor.withOpacity(0.2),
-        checkmarkColor: primaryColor,
-        labelStyle: TextStyle(
-          color: isSelected ? primaryColor : Colors.black,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-    );
-  }
-
   // 構建比賽卡片
   Widget _buildCompetitionCard(CompetitionModel competition) {
-    // 根據狀態選擇顏色
-    Color statusColor;
-    switch (competition.status) {
-      case '計劃中':
-        statusColor = Colors.blue;
-        break;
-      case '進行中':
-        statusColor = Colors.green;
-        break;
-      case '已結束':
-        statusColor = Colors.red;
-        break;
-      default:
-        statusColor = Colors.grey;
-    }
+    // 使用默認顏色
+    Color statusColor = Colors.blue;
 
     // 獲取當前用戶ID
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -416,19 +351,6 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: statusColor),
-                  ),
-                  child: Text(
-                    competition.status,
-                    style: TextStyle(color: statusColor, fontSize: 12),
                   ),
                 ),
               ],

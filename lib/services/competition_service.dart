@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'registration_service.dart';
+import 'package:flutter/foundation.dart';
 
 class CompetitionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -76,7 +77,7 @@ class CompetitionService {
 
       return competitions;
     } catch (e) {
-      print('獲取比賽列表出錯: $e');
+      debugPrint('獲取比賽列表出錯: $e');
       return [];
     }
   }
@@ -145,7 +146,7 @@ class CompetitionService {
 
       return competitionDetails;
     } catch (e) {
-      print('獲取比賽詳情出錯: $e');
+      debugPrint('獲取比賽詳情出錯: $e');
       return null;
     }
   }

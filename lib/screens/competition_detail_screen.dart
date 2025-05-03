@@ -9,11 +9,12 @@ import 'edit_competition_basic_info_screen.dart';
 import 'character_management.dart';
 import 'create_registration_form_screen.dart';
 import 'registrations_list_screen.dart';
-import '../utils/utils.dart';
 import 'name_list.dart';
 import 'score_recording_setup_screen.dart';
 import 'result/result_record.dart';
 import 'statistics/statistics_screen.dart';
+import 'result/result_manage_screen.dart';
+import 'award_list_screen.dart';
 
 class CompetitionDetailScreen extends StatefulWidget {
   final CompetitionModel competition;
@@ -123,54 +124,95 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
     }
   }
 
-  // 計算用戶年齡
-  int? calculateUserAge(String? birthdayString) {
-    if (birthdayString == null || birthdayString.isEmpty) return null;
-
-    try {
-      // 使用 utils.dart 中的函數計算年齡
-      return calculateAge(birthdayString);
-    } catch (e) {
-      debugPrint('計算年齡時出錯: $e');
-      return null;
-    }
-  }
-
   // 側邊欄管理工具列表
   final List<Map<String, dynamic>> _drawerTools = [
+    // 比賽管理類
     {
-      'icon': Icons.edit_note,
-      'title': '編輯比賽資料',
+      'category': '比賽設置',
+      'isCategory': true,
+    },
+    {
+      'icon': Icons.edit_outlined,
+      'title': '編輯比賽',
+      'color': Colors.blue,
+      'subtitle': '修改比賽基本信息和設置',
+      'forCreator': true,
       'onTap': () {},
     },
     {
-      'icon': Icons.assignment_outlined,
-      'title': '報名控制',
+      'icon': Icons.event_note_outlined,
+      'title': '項目管理',
+      'color': Colors.orange,
+      'subtitle': '管理比賽項目和設置',
+      'roles': ['score'],
       'onTap': () {},
     },
     {
-      'icon': Icons.people_outline,
-      'title': '管理出賽名單',
+      'icon': Icons.admin_panel_settings_outlined,
+      'title': '權限管理',
+      'color': Colors.purple,
+      'subtitle': '設置用戶角色和權限',
+      'forCreator': true,
+      'onTap': () {},
+    },
+
+    // 報名和參賽者管理類
+    {
+      'category': '參賽者管理',
+      'isCategory': true,
+    },
+    {
+      'icon': Icons.app_registration_outlined,
+      'title': '報名管理',
+      'color': Colors.green,
+      'subtitle': '管理報名表格和申請',
+      'roles': ['registration'],
       'onTap': () {},
     },
     {
-      'icon': Icons.security,
-      'title': '管理比賽權限',
+      'icon': Icons.people_alt_outlined,
+      'title': '分組名單',
+      'color': primaryColor,
+      'subtitle': '查看和管理參賽者分組',
+      'roles': ['registration', 'score'],
+      'onTap': () {},
+    },
+
+    // 成績和獎項管理類
+    {
+      'category': '成績和獎項',
+      'isCategory': true,
+    },
+    {
+      'icon': Icons.sports_outlined,
+      'title': '成績記錄',
+      'color': Colors.teal,
+      'subtitle': '記錄比賽成績數據',
+      'roles': ['score'],
       'onTap': () {},
     },
     {
-      'icon': Icons.description_outlined,
-      'title': '比賽章程管理',
+      'icon': Icons.assessment_outlined,
+      'title': '成績管理',
+      'color': Colors.amber,
+      'subtitle': '管理和審核比賽成績',
+      'roles': ['score'],
       'onTap': () {},
     },
     {
-      'icon': Icons.campaign_outlined,
-      'title': '公布公開消息',
+      'icon': Icons.emoji_events_outlined,
+      'title': '獎項管理',
+      'color': Colors.deepOrange,
+      'subtitle': '管理獎牌和頒獎儀式',
+      'roles': ['award'],
       'onTap': () {},
     },
     {
-      'icon': Icons.timer_outlined,
-      'title': '成績計時',
+      'icon': Icons.bar_chart_outlined,
+      'title': '數據統計',
+      'color': Colors.indigo,
+      'subtitle': '查看競賽數據和統計',
+      'roles': ['award'],
       'onTap': () {},
     },
   ];
@@ -257,7 +299,7 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: primaryColor.withOpacity(0.1),
+              backgroundColor: primaryColor.withValues(alpha: 0.1),
               radius: 24,
               backgroundImage: _adminUser?.profileImage != null
                   ? NetworkImage(_adminUser!.profileImage!)
@@ -283,6 +325,8 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
                     _adminUser?.email ?? '比賽管理員',
                     style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
+                  // 顯示用戶角色
+                  _buildUserRoles(),
                   if (_adminUser?.school != null &&
                       _adminUser!.school!.isNotEmpty)
                     Padding(
@@ -322,6 +366,60 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // 構建用戶角色顯示
+  Widget _buildUserRoles() {
+    final currentUserUid = _auth.currentUser?.uid;
+    if (currentUserUid == null) return const SizedBox.shrink();
+
+    List<String> roles = [];
+
+    // 檢查是否為比賽創建者
+    if (widget.competition.createdByUid == currentUserUid) {
+      // 如果是創建者，則只顯示「創建者」角色，不顯示其他角色
+      roles.add('創建者');
+    } else {
+      // 如果不是創建者，才檢查其他角色
+      if (widget.competition.hasRole(currentUserUid, 'registration')) {
+        roles.add('報名管理員');
+      }
+
+      if (widget.competition.hasRole(currentUserUid, 'score')) {
+        roles.add('成績管理員');
+      }
+
+      if (widget.competition.hasRole(currentUserUid, 'award')) {
+        roles.add('頒獎典禮管理員');
+      }
+    }
+
+    if (roles.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: primaryColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              roles.join(' • '),
+              style: TextStyle(
+                color: primaryColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -402,84 +500,461 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
     final bool isCreator = widget.competition.createdByUid == currentUserUid;
 
     return Drawer(
-      child: Column(
-        children: [
-          DrawerHeader(
-            decoration: const BoxDecoration(
-              color: primaryColor,
+      child: Container(
+        color: primaryColor, // 整個側邊欄使用統一的背景色
+        child: Column(
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(
+                color: primaryColor,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '比賽管理工具',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.competition.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // 添加比賽信息行
+                  Row(
+                    children: [
+                      // 日期指示
+                      Icon(Icons.calendar_today,
+                          size: 14, color: Colors.white.withValues(alpha: 0.7)),
+                      const SizedBox(width: 4),
+                      Text(
+                        widget.competition.startDate
+                            .toString()
+                            .substring(0, 10),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // 場地指示
+                      Icon(Icons.location_on,
+                          size: 14, color: Colors.white.withValues(alpha: 0.7)),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          widget.competition.venue ?? '未指定場地',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Expanded(
+              child: ListView.builder(
+                itemCount: _drawerTools.length,
+                itemBuilder: (context, index) {
+                  final tool = _drawerTools[index];
+
+                  // 如果是分類標題
+                  if (tool.containsKey('isCategory') &&
+                      tool['isCategory'] == true) {
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tool['category'],
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Divider(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              height: 1),
+                        ],
+                      ),
+                    );
+                  }
+
+                  // 檢查權限 - 處理特殊角色權限
+                  if ((tool.containsKey('forCreator') &&
+                          tool['forCreator'] == true &&
+                          !isCreator) ||
+                      (tool.containsKey('roles') &&
+                          currentUserUid != null &&
+                          !_userHasAnyRole(currentUserUid,
+                              List<String>.from(tool['roles'])))) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(tool['icon'], color: Colors.white),
+                    ),
+                    title: Text(
+                      tool['title'],
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    ),
+                    subtitle: tool.containsKey('subtitle')
+                        ? Text(
+                            tool['subtitle'],
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white70,
+                            ),
+                          )
+                        : null,
+                    trailing: const Icon(Icons.chevron_right,
+                        size: 20, color: Colors.white70),
+                    onTap: () {
+                      Navigator.pop(context);
+
+                      // 尋找對應的網格工具項並執行相同的操作
+                      final toolTitle = tool['title'];
+                      for (var gridTool in _getManagementToolList()) {
+                        if ((gridTool['label'] == toolTitle ||
+                                _getEquivalentTitle(gridTool['label']) ==
+                                    toolTitle) &&
+                            gridTool['onTap'] != null) {
+                          gridTool['onTap']();
+                          return;
+                        }
+                      }
+
+                      // 如果沒有找到對應的網格工具，則執行默認操作
+                      if (toolTitle == '編輯比賽') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                EditCompetitionBasicInfoScreen(
+                              competition: widget.competition,
+                            ),
+                          ),
+                        ).then((result) {
+                          if (result == true) {
+                            Navigator.pop(context, true);
+                          }
+                        });
+                      } else if (toolTitle == '權限管理') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CharacterManagementScreen(
+                              competition: widget.competition,
+                            ),
+                          ),
+                        );
+                      } else if (toolTitle == '項目管理') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ScoreRecordingSetupScreen(
+                              competitionId: widget.competition.id,
+                              competitionName: widget.competition.name,
+                            ),
+                          ),
+                        );
+                      } else if (toolTitle == '分組名單') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NameListScreen(
+                              competitionId: widget.competition.id,
+                              competitionName: widget.competition.name,
+                            ),
+                          ),
+                        );
+                      } else if (tool['onTap'] != null) {
+                        tool['onTap']();
+                      }
+                    },
+                  );
+                },
+              ),
+            ),
+            // 底部返回按鈕區域 - 無需額外的Container背景色，已經在外層設置
+            Divider(height: 1, color: Colors.white.withValues(alpha: 0.1)),
+            ListTile(
+              leading: const Icon(Icons.exit_to_app, color: Colors.white),
+              title: const Text(
+                '返回比賽列表',
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
+              onTap: () => Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 獲取標題轉換（網格標籤到側邊欄標題的映射）
+  String _getEquivalentTitle(String gridLabel) {
+    Map<String, String> titleMap = {
+      '編輯比賽': '編輯比賽',
+      '報名管理': '報名管理',
+      '權限管理': '權限管理',
+      '項目管理': '項目管理',
+      '成績記錄': '成績記錄',
+      '成績管理': '成績管理',
+      '分組名單': '分組名單',
+      '獎項管理': '獎項管理',
+      '數據統計': '數據統計',
+    };
+    return titleMap[gridLabel] ?? gridLabel;
+  }
+
+  // 檢查用戶是否擁有任何所需角色
+  bool _userHasAnyRole(String userId, List<String> requiredRoles) {
+    if (widget.competition.createdByUid == userId) return true; // 創建者擁有所有權限
+
+    for (var role in requiredRoles) {
+      if (widget.competition.hasRole(userId, role)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // 獲取管理工具列表方法（用於保持一致性）
+  List<Map<String, dynamic>> _getManagementToolList() {
+    return [
+      {
+        'icon': Icons.edit_outlined,
+        'label': '編輯比賽',
+        'color': Colors.blue,
+        'forCreator': true,
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditCompetitionBasicInfoScreen(
+                competition: widget.competition,
+              ),
+            ),
+          ).then((result) {
+            if (result == true) {
+              Navigator.pop(context, true);
+            }
+          });
+        },
+      },
+      {
+        'icon': Icons.app_registration_outlined,
+        'label': '報名管理',
+        'color': Colors.green,
+        'roles': ['registration'],
+        'onTap': () {
+          showDialog(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: const Text('報名控制'),
               children: [
-                const Text(
-                  '比賽管理工具',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                SimpleDialogOption(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CreateRegistrationFormScreen(
+                          competitionId: widget.competition.id,
+                          competitionName: widget.competition.name,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_document),
+                        SizedBox(width: 12),
+                        Text('設置報名表格'),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  widget.competition.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
+                SimpleDialogOption(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => RegistrationsListScreen(
+                          competitionId: widget.competition.id,
+                          competitionName: widget.competition.name,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.list_alt),
+                        SizedBox(width: 12),
+                        Text('查看已報名運動員'),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _drawerTools.length,
-              itemBuilder: (context, index) {
-                final tool = _drawerTools[index];
-
-                // 檢查權限 - 只有創建者可以管理權限
-                if (tool['title'] == '管理比賽權限' && !isCreator) {
-                  return const SizedBox.shrink();
-                }
-
-                return ListTile(
-                  leading: Icon(tool['icon']),
-                  title: Text(tool['title']),
-                  onTap: () {
-                    Navigator.pop(context); // 先關閉抽屜
-
-                    if (tool['title'] == '編輯比賽資料') {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EditCompetitionBasicInfoScreen(
-                            competition: widget.competition,
-                          ),
-                        ),
-                      ).then((result) {
-                        if (result == true) {
-                          Navigator.pop(context, true);
-                        }
-                      });
-                    } else if (tool['title'] == '管理比賽權限') {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CharacterManagementScreen(
-                            competition: widget.competition,
-                          ),
-                        ),
-                      );
-                    } else if (tool['onTap'] != null) {
-                      tool['onTap']();
-                    }
-                  },
-                );
-              },
+          );
+        },
+      },
+      {
+        'icon': Icons.admin_panel_settings_outlined,
+        'label': '權限管理',
+        'color': Colors.purple,
+        'forCreator': true,
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CharacterManagementScreen(
+                competition: widget.competition,
+              ),
             ),
-          ),
-        ],
-      ),
-    );
+          );
+        },
+      },
+      {
+        'icon': Icons.event_note_outlined,
+        'label': '項目管理',
+        'color': Colors.orange,
+        'roles': ['score'],
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ScoreRecordingSetupScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.sports_outlined,
+        'label': '成績記錄',
+        'color': Colors.teal,
+        'roles': ['score'],
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ResultRecordScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.assessment_outlined,
+        'label': '成績管理',
+        'color': Colors.amber,
+        'roles': ['score'],
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ResultManageScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.people_alt_outlined,
+        'label': '分組名單',
+        'color': primaryColor,
+        'roles': ['registration', 'score'],
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NameListScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.emoji_events_outlined,
+        'label': '獎項管理',
+        'color': Colors.deepOrange,
+        'roles': ['award'],
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AwardListScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.bar_chart_outlined,
+        'label': '數據統計',
+        'color': Colors.indigo,
+        'roles': ['award'],
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => StatisticsScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+    ];
   }
 
   // 比賽資訊卡片
@@ -518,18 +993,6 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
                   style: TextStyle(color: Colors.grey[600], fontSize: 14),
                 ),
                 const Spacer(),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.green[100],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '進行中',
-                    style: TextStyle(color: Colors.green[800], fontSize: 12),
-                  ),
-                ),
               ],
             ),
           ],
@@ -544,6 +1007,247 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
     final currentUserId = _auth.currentUser?.uid;
     final isCreator = widget.competition.createdByUid == currentUserId;
 
+    // 定義所有可用管理工具
+    final List<Map<String, dynamic>> allTools = [
+      {
+        'icon': Icons.edit_outlined,
+        'label': '編輯比賽',
+        'color': Colors.blue,
+        'forCreator': true, // 只有創建者可見
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EditCompetitionBasicInfoScreen(
+                competition: widget.competition,
+              ),
+            ),
+          ).then((result) {
+            if (result == true) {
+              Navigator.pop(context, true);
+            }
+          });
+        },
+      },
+      {
+        'icon': Icons.app_registration_outlined,
+        'label': '報名管理',
+        'color': Colors.green,
+        'roles': ['registration'], // 報名管理員可見
+        'onTap': () {
+          showDialog(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: const Text('報名控制'),
+              children: [
+                SimpleDialogOption(
+                  onPressed: () {
+                    Navigator.pop(context); // 關閉對話框
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CreateRegistrationFormScreen(
+                          competitionId: widget.competition.id,
+                          competitionName: widget.competition.name,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_document),
+                        SizedBox(width: 12),
+                        Text('設置報名表格'),
+                      ],
+                    ),
+                  ),
+                ),
+                SimpleDialogOption(
+                  onPressed: () {
+                    Navigator.pop(context); // 關閉對話框
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => RegistrationsListScreen(
+                          competitionId: widget.competition.id,
+                          competitionName: widget.competition.name,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.list_alt),
+                        SizedBox(width: 12),
+                        Text('查看已報名運動員'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.admin_panel_settings_outlined,
+        'label': '權限管理',
+        'color': Colors.purple,
+        'forCreator': true, // 只有創建者可見
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CharacterManagementScreen(
+                competition: widget.competition,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.event_note_outlined,
+        'label': '項目管理',
+        'color': Colors.orange,
+        'roles': ['score'], // 成績管理員可見
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ScoreRecordingSetupScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.sports_outlined,
+        'label': '成績記錄',
+        'color': Colors.teal,
+        'roles': ['score'], // 成績管理員可見
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ResultRecordScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.assessment_outlined,
+        'label': '成績管理',
+        'color': Colors.amber,
+        'roles': ['score'], // 成績管理員可見
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ResultManageScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.people_alt_outlined,
+        'label': '分組名單',
+        'color': primaryColor,
+        'roles': ['registration', 'score'], // 報名管理員和成績管理員可見
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NameListScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.emoji_events_outlined,
+        'label': '獎項管理',
+        'color': Colors.deepOrange,
+        'roles': ['award'], // 頒獎典禮管理員可見
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AwardListScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.bar_chart_outlined,
+        'label': '數據統計',
+        'color': Colors.indigo,
+        'roles': ['award'], // 頒獎典禮管理員可見
+        'onTap': () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => StatisticsScreen(
+                competitionId: widget.competition.id,
+                competitionName: widget.competition.name,
+              ),
+            ),
+          );
+        },
+      },
+    ];
+
+    // 根據用戶角色篩選工具
+    List<Map<String, dynamic>> visibleTools = [];
+
+    if (currentUserId != null) {
+      if (isCreator) {
+        // 比賽創建者可以看到所有工具
+        visibleTools = List.from(allTools);
+      } else {
+        // 其他用戶根據角色權限篩選
+        for (var tool in allTools) {
+          // 跳過只給創建者顯示的工具
+          if (tool['forCreator'] == true) {
+            continue;
+          }
+
+          // 檢查用戶是否有該工具所需的任一角色
+          if (tool.containsKey('roles')) {
+            List<String> requiredRoles = List<String>.from(tool['roles']);
+            bool hasAnyRole = false;
+
+            for (var role in requiredRoles) {
+              if (widget.competition.hasRole(currentUserId, role)) {
+                hasAnyRole = true;
+                break;
+              }
+            }
+
+            if (hasAnyRole) {
+              visibleTools.add(tool);
+            }
+          }
+        }
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -552,221 +1256,45 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
             color: Colors.grey.shade50,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: GridView.count(
-            crossAxisCount: 3,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(12),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            children: [
-              // 編輯比賽資料
-              _buildToolButton(
-                icon: Icons.edit_outlined,
-                label: '編輯比賽',
-                color: Colors.blue,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => EditCompetitionBasicInfoScreen(
-                        competition: widget.competition,
-                      ),
-                    ),
-                  ).then((result) {
-                    if (result == true) {
-                      Navigator.pop(context, true);
-                    }
-                  });
-                },
-              ),
-
-              // 報名管理
-              _buildToolButton(
-                icon: Icons.app_registration_outlined,
-                label: '報名管理',
-                color: Colors.green,
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => SimpleDialog(
-                      title: const Text('報名控制'),
+          child: visibleTools.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
                       children: [
-                        SimpleDialogOption(
-                          onPressed: () {
-                            Navigator.pop(context); // 關閉對話框
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    CreateRegistrationFormScreen(
-                                  competitionId: widget.competition.id,
-                                  competitionName: widget.competition.name,
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8.0),
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit_document),
-                                SizedBox(width: 12),
-                                Text('設置報名表格'),
-                              ],
-                            ),
-                          ),
+                        Icon(Icons.lock, size: 48, color: Colors.grey.shade400),
+                        const SizedBox(height: 16),
+                        Text(
+                          '沒有可用的管理工具',
+                          style: TextStyle(
+                              color: Colors.grey.shade600, fontSize: 16),
                         ),
-                        SimpleDialogOption(
-                          onPressed: () {
-                            Navigator.pop(context); // 關閉對話框
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => RegistrationsListScreen(
-                                  competitionId: widget.competition.id,
-                                  competitionName: widget.competition.name,
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8.0),
-                            child: Row(
-                              children: [
-                                Icon(Icons.list_alt),
-                                SizedBox(width: 12),
-                                Text('查看已報名運動員'),
-                              ],
-                            ),
-                          ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '請聯繫比賽創建者獲取權限',
+                          style: TextStyle(
+                              color: Colors.grey.shade500, fontSize: 14),
                         ),
                       ],
                     ),
-                  );
-                },
-              ),
-
-              // 權限管理
-              _buildToolButton(
-                icon: Icons.admin_panel_settings_outlined,
-                label: '權限管理',
-                color: Colors.purple,
-                onTap: () {
-                  if (isCreator) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CharacterManagementScreen(
-                          competition: widget.competition,
-                        ),
-                      ),
+                  ),
+                )
+              : GridView.count(
+                  crossAxisCount: 3,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(12),
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  children: visibleTools.map((tool) {
+                    return _buildToolButton(
+                      icon: tool['icon'],
+                      label: tool['label'],
+                      color: tool['color'],
+                      onTap: tool['onTap'],
                     );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('只有比賽創建者才能管理權限')),
-                    );
-                  }
-                },
-              ),
-
-              // 項目管理
-              _buildToolButton(
-                icon: Icons.event_note_outlined,
-                label: '項目管理',
-                color: Colors.orange,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ScoreRecordingSetupScreen(
-                        competitionId: widget.competition.id,
-                        competitionName: widget.competition.name,
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              // 成績記錄
-              _buildToolButton(
-                icon: Icons.sports_outlined,
-                label: '成績記錄',
-                color: Colors.teal,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ResultRecordScreen(
-                        competitionId: widget.competition.id,
-                        competitionName: widget.competition.name,
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              // 成績管理
-              _buildToolButton(
-                icon: Icons.assessment_outlined,
-                label: '成績管理',
-                color: Colors.amber,
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('成績管理功能即將上線')),
-                  );
-                },
-              ),
-
-              // 分組名單
-              _buildToolButton(
-                icon: Icons.people_alt_outlined,
-                label: '分組名單',
-                color: primaryColor,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NameListScreen(
-                        competitionId: widget.competition.id,
-                        competitionName: widget.competition.name,
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              // 獎項管理
-              _buildToolButton(
-                icon: Icons.emoji_events_outlined,
-                label: '獎項管理',
-                color: Colors.deepOrange,
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('獎項管理功能即將上線')),
-                  );
-                },
-              ),
-
-              // 數據統計
-              _buildToolButton(
-                icon: Icons.bar_chart_outlined,
-                label: '數據統計',
-                color: Colors.indigo,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => StatisticsScreen(
-                        competitionId: widget.competition.id,
-                        competitionName: widget.competition.name,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+                  }).toList(),
+                ),
         ),
       ],
     );
@@ -779,6 +1307,9 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
     required Color color,
     required VoidCallback onTap,
   }) {
+    // 確保顏色不為null
+    final Color safeColor = color;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -786,10 +1317,10 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: safeColor.withValues(alpha: 0.3)),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.1),
+              color: safeColor.withValues(alpha: 0.1),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
@@ -798,83 +1329,18 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: color, size: 32),
+            Icon(icon, color: safeColor, size: 32),
             const SizedBox(height: 8),
             Text(
               label,
               style: TextStyle(
-                color: color,
+                color: safeColor,
                 fontWeight: FontWeight.w500,
                 fontSize: 12,
               ),
               textAlign: TextAlign.center,
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  // 構建統計選項
-  Widget _buildStatisticOption({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    bool isDisabled = false,
-  }) {
-    return InkWell(
-      onTap: isDisabled
-          ? null
-          : () {
-              Navigator.pop(context); // 關閉對話框
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('正在開發$title功能，敬請期待')),
-              );
-              // TODO: 實現跳轉到相應的數據分析頁面
-              // Navigator.push(
-              //   context,
-              //   MaterialPageRoute(
-              //     builder: (context) => StatisticsScreen(
-              //       competitionId: widget.competition.id,
-              //       competitionName: widget.competition.name,
-              //       statisticType: title,
-              //     ),
-              //   ),
-              // );
-            },
-      child: Opacity(
-        opacity: isDisabled ? 0.5 : 1.0,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Row(
-            children: [
-              Icon(icon, color: Colors.indigo),
-              SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (!isDisabled) Icon(Icons.arrow_forward_ios, size: 16),
-            ],
-          ),
         ),
       ),
     );
@@ -893,20 +1359,6 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
             Text(
               '© ${DateTime.now().year} 校際比賽管理系統',
               style: TextStyle(color: Colors.grey[600], fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () {
-                // 測試計算年齡功能
-                String testBirthday = '2000-01-01';
-                int? age = calculateUserAge(testBirthday);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content:
-                          Text('出生日期 $testBirthday 的年齡是: ${age ?? "無法計算"} 歲')),
-                );
-              },
-              child: const Text('測試計算年齡', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),

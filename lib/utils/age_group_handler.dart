@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 /// 處理年齡組別的工具類
 /// 提供統一的年齡組別處理邏輯，確保數據一致性
@@ -34,7 +35,7 @@ class AgeGroupHandler {
         }
       }
     } catch (e) {
-      print('處理年齡組別時出錯: $e');
+      debugPrint('處理年齡組別時出錯: $e');
     }
 
     // 如果沒有數據，添加默認組別

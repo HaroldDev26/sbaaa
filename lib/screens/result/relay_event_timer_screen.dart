@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../utils/colors.dart';
 import 'event_result_screen.dart';
+import '../../services/scoring_service.dart';
 
 class RelayEventTimerScreen extends StatefulWidget {
   final String competitionId;
@@ -24,6 +25,7 @@ class RelayEventTimerScreen extends StatefulWidget {
 
 class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ScoringService _scoringService = ScoringService();
 
   // 計時器相關變數
   bool _isRunning = false;
@@ -35,9 +37,6 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
 
   // 隊伍成績記錄
   final Map<String, int> _teamTimes = {};
-
-  // 分棒計時記錄 (隊伍ID -> [各棒時間])
-  final Map<String, List<int>> _legTimes = {};
 
   // 檢錄狀態
   final Map<String, bool> _checkedInStatus = {};
@@ -65,10 +64,6 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
       final teamId = team['id'] as String;
       _teamTimes[teamId] = 0;
       _checkedInStatus[teamId] = false;
-
-      // 初始化分棒時間記錄
-      final membersCount = (team['members'] as List?)?.length ?? 4;
-      _legTimes[teamId] = List.filled(membersCount, 0);
     }
   }
 
@@ -185,9 +180,6 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
       // 重置隊伍成績
       for (var team in widget.teams) {
         _teamTimes[team['id'] as String] = 0;
-        // 重置分棒時間
-        final membersCount = (team['members'] as List?)?.length ?? 4;
-        _legTimes[team['id'] as String] = List.filled(membersCount, 0);
       }
     });
   }
@@ -262,7 +254,6 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
         'competitionId': widget.competitionId,
         'competitionName': widget.competitionName,
         'recordedAt': now,
-        'legTimes': _legTimes[teamId], // 保存各棒成績
       };
 
       // 加入批次
@@ -272,7 +263,7 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
       final summaryRef = _firestore
           .collection('competitions')
           .doc(widget.competitionId)
-          .collection('event_summaries')
+          .collection('final_results')
           .doc(widget.eventName.replaceAll(' ', '_').toLowerCase());
 
       batch.set(
@@ -308,65 +299,32 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
     }
   }
 
-  // 記錄接力棒成績
-  void _recordLegTime(String teamId, int legIndex) {
-    if (_isReset || !_isRunning) return;
-
-    final currentCentiseconds = _getCurrentCentiseconds();
-    if (currentCentiseconds > 0) {
-      setState(() {
-        _legTimes[teamId]![legIndex] = currentCentiseconds;
-      });
-
-      // 顯示提示
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('已記錄第 ${legIndex + 1} 棒交接時間'),
-          backgroundColor: Colors.blue,
-          duration: const Duration(seconds: 1),
-        ),
-      );
-    }
-  }
-
-  // 產生排名
+  // 根據時間排序隊伍
   List<Map<String, dynamic>> _getRankedTeams() {
-    try {
-      // 先過濾出有成績的隊伍
-      final teamsWithTimes = widget.teams
-          .where(
-            (team) =>
-                team['id'] != null &&
-                _teamTimes.containsKey(team['id'] as String) &&
-                _teamTimes[team['id'] as String]! > 0,
-          )
-          .map(
-            (team) => {
-              ...team,
-              'time': _teamTimes[team['id'] as String] ?? 0,
-            },
-          )
-          .toList();
+    // 過濾掉沒有時間記錄的隊伍
+    List<Map<String, dynamic>> rankedTeams = widget.teams
+        .where((team) => _teamTimes.containsKey(team['id']))
+        .map((team) {
+      final int time = _teamTimes[team['id']]!;
+      return {
+        ...team,
+        'time': time,
+        'timeFormatted': _formatTime(time, includeMs: false),
+        'timeFormattedWithMs': _formatTime(time, includeMs: true),
+      };
+    }).toList();
 
-      // 按照時間排序
-      teamsWithTimes.sort(
-        (a, b) => (a['time'] as int).compareTo(b['time'] as int),
-      );
+    // 使用ScoringService進行排序和積分計算
+    // 接力賽是徑賽的一種，使用徑賽的排序方法，但設定isRelayEvent為true
+    rankedTeams = _scoringService.sortAndRankTrackEventAthletes(rankedTeams,
+        isRelayEvent: true // 接力賽積分翻倍
+        );
 
-      // 添加排名
-      for (int i = 0; i < teamsWithTimes.length; i++) {
-        teamsWithTimes[i]['rank'] = i + 1;
-      }
-
-      return teamsWithTimes;
-    } catch (e) {
-      debugPrint('生成排名時發生錯誤: $e');
-      return [];
-    }
+    return rankedTeams;
   }
 
   // 格式化時間顯示 (標準格式)
-  String _formatTime(int centiseconds) {
+  String _formatTime(int centiseconds, {bool includeMs = false}) {
     try {
       // 安全處理時間
       if (centiseconds < 0) centiseconds = 0;
@@ -440,14 +398,13 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
 
     // 如果沒有足夠的隊伍有成績，顯示提示
     if (rankedTeams.length < 2) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('請至少記錄兩支隊伍的成績以產生排名'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('請至少記錄兩支隊伍的成績以產生排名'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
@@ -467,24 +424,17 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                   const SizedBox(height: 16),
                   Text('共 ${rankedTeams.length} 支隊伍有完成記錄：'),
                   const SizedBox(height: 8),
-                  ...rankedTeams.take(3).map(
-                        (team) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            '${team['rank']}. ${team['teamName'] ?? '未知隊伍'} - ${_formatTimeWithMs(team['time'] as int)}',
-                            style: TextStyle(
-                              fontWeight: team['rank'] == 1
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              color: team['rank'] == 1
-                                  ? Colors.blue
-                                  : Colors.black87,
-                            ),
+                  ...rankedTeams.take(5).map(
+                        (team) => Text(
+                          '${team['rank']}. ${team['teamName']} - ${_formatTime(team['time'] as int)}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            height: 1.5,
                           ),
                         ),
                       ),
-                  if (rankedTeams.length > 3)
-                    Text('... 和其他 ${rankedTeams.length - 3} 支隊伍'),
+                  if (rankedTeams.length > 5)
+                    Text('以及其他 ${rankedTeams.length - 5} 支隊伍...'),
                 ],
               ),
               actions: [
@@ -494,10 +444,6 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
                   child: const Text('確認保存'),
                 ),
               ],
@@ -507,18 +453,22 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
         false;
 
     if (!shouldProceed) return;
-    if (!mounted) return;
 
-    // 顯示加載指示器
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          return const Center(child: CircularProgressIndicator());
-        },
-      );
-    }
+    // 顯示保存中指示器
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('正在保存最終成績...'),
+          ],
+        ),
+      ),
+    );
 
     try {
       // 儲存最終排名到Firestore
@@ -552,7 +502,6 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
           'timeFormatted': _formatTime(time),
           'timeFormattedWithMs': _formatTimeWithMs(time),
           'rank': team['rank'] ?? 0,
-          'legTimes': _legTimes[team['id']] ?? List.filled(4, 0),
         };
       }).toList();
 
@@ -573,55 +522,50 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
       await batch.commit();
 
       // 關閉加載指示器
-      if (mounted) {
-        Navigator.pop(context);
-      }
+      if (!mounted) return;
+      Navigator.pop(context);
 
       // 顯示成功提示
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('成績排名已成功保存'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('成績排名已成功保存'),
+          backgroundColor: Colors.green,
+        ),
+      );
 
       // 跳轉到成績排名頁面
-      if (mounted) {
-        Navigator.push(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                EventResultScreen(
-              competitionId: widget.competitionId,
-              competitionName: widget.competitionName,
-              eventName: widget.eventName,
-              eventResults: finalResultData,
-            ),
-            transitionsBuilder: (
-              context,
-              animation,
-              secondaryAnimation,
-              child,
-            ) {
-              return FadeTransition(opacity: animation, child: child);
-            },
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              EventResultScreen(
+            competitionId: widget.competitionId,
+            competitionName: widget.competitionName,
+            eventName: widget.eventName,
+            eventResults: finalResultData,
           ),
-        );
-      }
+          transitionsBuilder: (
+            context,
+            animation,
+            secondaryAnimation,
+            child,
+          ) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        ),
+      );
     } catch (e) {
       // 關閉加載指示器
-      if (mounted) {
-        Navigator.pop(context);
-      }
+      if (!mounted) return;
+      Navigator.pop(context);
 
       // 顯示錯誤訊息
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('生成最終結果失敗: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('生成最終結果失敗: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -646,28 +590,8 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
           '${widget.eventName} - 接力計時',
           style: TextStyle(fontSize: isSmallScreen ? 18 : 20),
         ),
-        actions: [
-          ElevatedButton.icon(
-            onPressed: _generateResults,
-            icon: const Icon(Icons.save_alt, size: 18),
-            label: Text(
-              '成績保存',
-              style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(
-                horizontal: isSmallScreen ? 8 : 12,
-                vertical: isSmallScreen ? 4 : 8,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
+        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+        elevation: 0,
       ),
       body: Column(
         children: [
@@ -687,10 +611,10 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                   ),
                   decoration: BoxDecoration(
                     color: _isRunning
-                        ? Colors.green.withOpacity(0.3)
+                        ? Colors.green.withValues(alpha: 0.3)
                         : _isReset
-                            ? Colors.grey.withOpacity(0.3)
-                            : Colors.red.withOpacity(0.3),
+                            ? Colors.grey.withValues(alpha: 0.3)
+                            : Colors.red.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
@@ -711,12 +635,12 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: _isRunning
-                          ? Colors.green.withOpacity(0.5)
-                          : Colors.white.withOpacity(0.2),
+                          ? Colors.green.withValues(alpha: 0.5)
+                          : Colors.white.withValues(alpha: 0.2),
                       width: 2,
                     ),
                   ),
@@ -751,7 +675,7 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
               color: Colors.grey.shade100,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.2),
+                  color: Colors.grey.withValues(alpha: 0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -971,8 +895,8 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
                       color: isCheckedIn
-                          ? Colors.green.shade200
-                          : Colors.grey.shade300,
+                          ? Colors.green.withValues(alpha: 0.2)
+                          : Colors.grey.withValues(alpha: 0.3),
                       width: 1.5,
                     ),
                   ),
@@ -988,7 +912,7 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                               width: isSmallScreen ? 32 : 40,
                               height: isSmallScreen ? 32 : 40,
                               decoration: BoxDecoration(
-                                color: primaryColor.withOpacity(0.8),
+                                color: primaryColor.withValues(alpha: 0.8),
                                 shape: BoxShape.circle,
                               ),
                               child: Center(
@@ -1040,8 +964,10 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: isCheckedIn
-                                                ? Colors.green.shade100
-                                                : Colors.orange.shade100,
+                                                ? Colors.green
+                                                    .withValues(alpha: 0.1)
+                                                : Colors.orange
+                                                    .withValues(alpha: 0.1),
                                             borderRadius: BorderRadius.circular(
                                               4,
                                             ),
@@ -1065,7 +991,8 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: Colors.blue.shade100,
+                                          color: Colors.blue
+                                              .withValues(alpha: 0.1),
                                           borderRadius: BorderRadius.circular(
                                             4,
                                           ),
@@ -1089,13 +1016,13 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 color: hasTime
-                                    ? Colors.green.shade100
-                                    : Colors.grey.shade100,
+                                    ? Colors.green.withValues(alpha: 0.1)
+                                    : Colors.grey.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: hasTime
-                                      ? Colors.green.shade300
-                                      : Colors.grey.shade300,
+                                      ? Colors.green.withValues(alpha: 0.3)
+                                      : Colors.grey.withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Column(
@@ -1132,65 +1059,23 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                             title: const Text('隊員資訊'),
                             children: [
                               ...List.generate(membersCount, (i) {
-                                final legTime = _legTimes[teamId]?[i] ?? 0;
                                 return ListTile(
                                   leading: CircleAvatar(
-                                    backgroundColor: Colors.blue.shade100,
+                                    backgroundColor:
+                                        Colors.blue.withValues(alpha: 0.1),
                                     child: Text('${i + 1}'),
                                   ),
                                   title: Text(
                                     (team['members'] as List)[i]['name'] ??
                                         '隊員 ${i + 1}',
                                   ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // 顯示分棒時間
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: legTime > 0
-                                              ? Colors.green.shade50
-                                              : Colors.grey.shade50,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          border: Border.all(
-                                            color: legTime > 0
-                                                ? Colors.green.shade300
-                                                : Colors.grey.shade300,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          legTime > 0
-                                              ? _formatTimeWithMs(legTime)
-                                              : '-',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: legTime > 0
-                                                ? Colors.green.shade800
-                                                : Colors.grey,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      // 記錄分棒按鈕
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.timer_outlined,
-                                          size: 20,
-                                        ),
-                                        color: Colors.blue,
-                                        onPressed: _isRunning && !_isReset
-                                            ? () => _recordLegTime(teamId, i)
-                                            : null,
-                                        tooltip: '記錄第${i + 1}棒時間',
-                                      ),
-                                    ],
+                                  subtitle: Text(
+                                    (team['members'] as List)[i]['school'] ??
+                                        '',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade700,
+                                    ),
                                   ),
                                 );
                               }),
@@ -1213,8 +1098,9 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
                                 ),
                                 label: Text(hasTime ? '更新成績' : '記錄成績'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      hasTime ? Colors.orange : Colors.teal,
+                                  backgroundColor: hasTime
+                                      ? Colors.orange.withValues(alpha: 0.8)
+                                      : Colors.teal.withValues(alpha: 0.8),
                                   foregroundColor: Colors.white,
                                 ),
                               ),
@@ -1253,8 +1139,8 @@ class _RelayEventTimerScreenState extends State<RelayEventTimerScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         elevation: 2,
-        shadowColor: color.withOpacity(0.5),
-        disabledBackgroundColor: color.withOpacity(0.3),
+        shadowColor: color.withValues(alpha: 0.5),
+        disabledBackgroundColor: color.withValues(alpha: 0.3),
         disabledForegroundColor: Colors.white70,
       ),
     );

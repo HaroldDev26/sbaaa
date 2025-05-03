@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/event_result.dart';
 import '../models/team_score.dart';
 
@@ -15,7 +16,7 @@ class AnalyticsService {
         return EventResult.fromFirestore(data);
       }).toList();
     } catch (e) {
-      print('獲取成績出錯: $e');
+      debugPrint('獲取成績出錯: $e');
       return [];
     }
   }
@@ -34,7 +35,7 @@ class AnalyticsService {
         return EventResult.fromFirestore(data);
       }).toList();
     } catch (e) {
-      print('獲取項目成績出錯: $e');
+      debugPrint('獲取項目成績出錯: $e');
       return [];
     }
   }
@@ -53,7 +54,7 @@ class AnalyticsService {
         return EventResult.fromFirestore(data);
       }).toList();
     } catch (e) {
-      print('獲取學校成績出錯: $e');
+      debugPrint('獲取學校成績出錯: $e');
       return [];
     }
   }
@@ -90,11 +91,11 @@ class AnalyticsService {
       });
 
       // 按總分排序（降序）
-      teamScores.sort((a, b) => b.totalScore.compareTo(a.totalScore));
+      teamScores.sort((a, b) => b.totalPoints.compareTo(a.totalPoints));
 
       return teamScores;
     } catch (e) {
-      print('計算團隊得分出錯: $e');
+      debugPrint('計算團隊得分出錯: $e');
       return [];
     }
   }
@@ -166,7 +167,7 @@ class AnalyticsService {
         'timeDistribution': timeDistribution,
       };
     } catch (e) {
-      print('獲取項目分佈出錯: $e');
+      debugPrint('獲取項目分佈出錯: $e');
       return {'count': 0, 'error': e.toString()};
     }
   }

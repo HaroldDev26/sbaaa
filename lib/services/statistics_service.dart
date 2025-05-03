@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/event_result.dart';
-import '../models/team_score.dart';
+import '../models/team_score.dart' as team_score;
 import 'analytics_service.dart';
 
 /// 用於統計分析的服務，將UI與數據分析層連接
@@ -42,7 +43,7 @@ class StatisticsService {
 
       return [];
     } catch (e) {
-      print('獲取比賽項目失敗: $e');
+      debugPrint('獲取比賽項目失敗: $e');
       return [];
     }
   }
@@ -54,6 +55,9 @@ class StatisticsService {
     String? gender,
     String? ageGroup,
   }) async {
+    debugPrint(
+        'getEventResults - 參數: competitionId=$competitionId, eventName=$eventName, gender=$gender, ageGroup=$ageGroup');
+
     try {
       // 嘗試從final_results獲取最終結果
       QuerySnapshot resultsSnapshot;
@@ -69,15 +73,19 @@ class StatisticsService {
 
         if (resultsSnapshot.docs.isEmpty) {
           // 如果沒有找到final_results，則從results獲取原始結果
+          debugPrint('沒有在final_results中找到結果，嘗試從results獲取');
           resultsSnapshot = await _firestore
               .collection('competitions')
               .doc(competitionId)
               .collection('results')
               .where('eventName', isEqualTo: eventName)
               .get();
+        } else {
+          debugPrint('在final_results中找到 ${resultsSnapshot.docs.length} 條結果');
         }
       } catch (e) {
         // 如果訪問final_results出錯，則從results獲取原始結果
+        debugPrint('訪問final_results出錯: $e，轉而從results獲取');
         resultsSnapshot = await _firestore
             .collection('competitions')
             .doc(competitionId)
@@ -91,8 +99,8 @@ class StatisticsService {
         final fieldResultsDoc = await _firestore
             .collection('competitions')
             .doc(competitionId)
-            .collection('field_results')
-            .doc('${eventName}_默認')
+            .collection('final_results')
+            .doc('field_${eventName}_默認')
             .get();
 
         if (fieldResultsDoc.exists && fieldResultsDoc.data() != null) {
@@ -164,15 +172,19 @@ class StatisticsService {
         return EventResult.fromFirestore(data);
       }).toList();
 
+      debugPrint('從數據庫獲取到 ${results.length} 條原始結果');
+
       // 如果沒有排名信息，根據成績排序並設置排名
       bool hasRanking = results.any((result) => result.rank != null);
       if (!hasRanking) {
-        if (results.first.time != null) {
+        if (results.isNotEmpty && results.first.time != null) {
           // 徑賽排序（時間升序）
           results.sort((a, b) => a.time!.compareTo(b.time!));
-        } else if (results.first.score != null) {
+          debugPrint('按時間排序（徑賽）');
+        } else if (results.isNotEmpty && results.first.score != null) {
           // 田賽排序（成績降序）
           results.sort((a, b) => b.score!.compareTo(a.score!));
+          debugPrint('按成績排序（田賽）');
         }
 
         // 設置排名
@@ -181,10 +193,22 @@ class StatisticsService {
         }
       }
 
+      // 調試：打印前3條記錄的性別和年齡組別
+      if (results.isNotEmpty) {
+        debugPrint('前幾條記錄的性別和年齡組別信息:');
+        for (var i = 0; i < (results.length > 3 ? 3 : results.length); i++) {
+          var result = results[i];
+          debugPrint(
+              '  第${i + 1}名: ${result.athleteName}, 性別=${result.gender}, 年齡組別=${result.ageGroup}');
+        }
+      }
+
       // 應用過濾器
-      return _filterResults(results, gender, ageGroup);
+      final filteredResults = _filterResults(results, gender, ageGroup);
+      debugPrint('過濾後結果數量: ${filteredResults.length}');
+      return filteredResults;
     } catch (e) {
-      print('獲取項目成績失敗: $e');
+      debugPrint('獲取項目成績失敗: $e');
       return [];
     }
   }
@@ -195,15 +219,33 @@ class StatisticsService {
     String? gender,
     String? ageGroup,
   ) {
+    debugPrint(
+        '過濾結果 - 總數: ${results.length}, 性別過濾: $gender, 年齡組別過濾: $ageGroup');
+
     if (gender == null && ageGroup == null) {
+      debugPrint('沒有過濾條件，返回所有結果');
       return results;
     }
 
-    return results.where((result) {
+    final filteredResults = results.where((result) {
       bool matchGender = gender == null || result.gender == gender;
       bool matchAgeGroup = ageGroup == null || result.ageGroup == ageGroup;
+
+      if (!matchGender) {
+        debugPrint(
+            '排除結果 - ${result.athleteName}: 性別不匹配 (需要=$gender, 實際=${result.gender})');
+      }
+
+      if (!matchAgeGroup) {
+        debugPrint(
+            '排除結果 - ${result.athleteName}: 年齡組別不匹配 (需要=$ageGroup, 實際=${result.ageGroup})');
+      }
+
       return matchGender && matchAgeGroup;
     }).toList();
+
+    debugPrint('過濾後結果數量: ${filteredResults.length}');
+    return filteredResults;
   }
 
   /// 計算統計數據
@@ -270,7 +312,7 @@ class StatisticsService {
   }
 
   /// 獲取團隊成績
-  Future<List<TeamScore>> getTeamScores(String competitionId,
+  Future<List<team_score.TeamScore>> getTeamScores(String competitionId,
       {String? event}) async {
     try {
       List<EventResult> results;
@@ -300,9 +342,9 @@ class StatisticsService {
             'teamId': school,
             'teamName': school,
             'school': school,
-            'totalScore': 0,
-            'medals': {1: 0, 2: 0, 3: 0},
-            'eventScores': <String, int>{},
+            'totalPoints': 0,
+            'medalCounts': {'gold': 0, 'silver': 0, 'bronze': 0},
+            'pointsByEvent': <String, int>{},
           };
         }
 
@@ -317,53 +359,89 @@ class StatisticsService {
           }
 
           // 更新總分
-          teamsData[school]!['totalScore'] =
-              teamsData[school]!['totalScore'] + points;
+          teamsData[school]!['totalPoints'] =
+              teamsData[school]!['totalPoints'] + points;
 
           // 更新項目得分
-          final eventScores =
-              teamsData[school]!['eventScores'] as Map<String, int>;
-          eventScores[result.eventName] =
-              (eventScores[result.eventName] ?? 0) + points;
+          final pointsByEvent =
+              teamsData[school]!['pointsByEvent'] as Map<String, int>;
+          pointsByEvent[result.eventName] =
+              (pointsByEvent[result.eventName] ?? 0) + points;
 
           // 更新獎牌
           if (result.rank! <= 3) {
-            final medals = teamsData[school]!['medals'] as Map<int, int>;
-            medals[result.rank!] = medals[result.rank!]! + 1;
+            final medalCounts =
+                teamsData[school]!['medalCounts'] as Map<String, int>;
+            String medalType;
+            switch (result.rank!) {
+              case 1:
+                medalType = 'gold';
+                break;
+              case 2:
+                medalType = 'silver';
+                break;
+              case 3:
+                medalType = 'bronze';
+                break;
+              default:
+                continue;
+            }
+            medalCounts[medalType] = (medalCounts[medalType] ?? 0) + 1;
           }
         }
       }
 
       // 將數據轉換為TeamScore對象列表
-      List<TeamScore> teamScores = teamsData.values.map((data) {
-        List<Medal> medals = [];
-
-        // 添加獎牌
-        final medalsMap = data['medals'] as Map<int, int>;
-        if (medalsMap[1]! > 0)
-          medals.add(Medal(type: 'gold', count: medalsMap[1]!));
-        if (medalsMap[2]! > 0)
-          medals.add(Medal(type: 'silver', count: medalsMap[2]!));
-        if (medalsMap[3]! > 0)
-          medals.add(Medal(type: 'bronze', count: medalsMap[3]!));
-
-        return TeamScore(
-          teamId: data['teamId'],
-          teamName: data['teamName'],
+      List<team_score.TeamScore> teamScores = teamsData.values.map((data) {
+        return team_score.TeamScore(
           school: data['school'],
-          totalScore: data['totalScore'],
-          medals: medals,
-          eventScores: Map<String, int>.from(data['eventScores']),
+          medalCounts: Map<String, int>.from(data['medalCounts']),
+          pointsByEvent: Map<String, int>.from(data['pointsByEvent']),
+          totalPoints: data['totalPoints'],
         );
       }).toList();
 
       // 按總分排序
-      teamScores.sort((a, b) => b.totalScore.compareTo(a.totalScore));
+      teamScores.sort((a, b) => b.totalPoints.compareTo(a.totalPoints));
 
       return teamScores;
     } catch (e) {
-      print('獲取團隊成績失敗: $e');
+      debugPrint('獲取團隊成績失敗: $e');
       return [];
+    }
+  }
+
+  // 根據年齡獲取適合的年齡組別
+  String? getAgeGroupForAge(int age, List<Map<String, dynamic>> ageGroups) {
+    for (var group in ageGroups) {
+      final int? startAge = group['startAge'] as int?;
+      final int? endAge = group['endAge'] as int?;
+      if (startAge != null &&
+          endAge != null &&
+          age >= startAge &&
+          age <= endAge) {
+        return group['name'] as String?;
+      }
+    }
+    return null;
+  }
+
+  // 獲取比賽的 metadata
+  Future<Map<String, dynamic>?> getCompetitionMetadata(
+      String competitionId) async {
+    try {
+      final compDoc =
+          await _firestore.collection('competitions').doc(competitionId).get();
+      if (compDoc.exists && compDoc.data() != null) {
+        final data = compDoc.data()!;
+        if (data.containsKey('metadata')) {
+          return data['metadata'] as Map<String, dynamic>;
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('獲取比賽 metadata 失敗: $e');
+      return null;
     }
   }
 }
