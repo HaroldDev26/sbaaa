@@ -6,6 +6,7 @@ import '../utils/colors.dart';
 import '../utils/utils.dart'; // 導入工具函數
 import '../resources/auth_methods.dart';
 import 'athlete_competition_view.dart';
+import 'login_screen.dart';
 
 /// 運動員首頁屏幕
 ///
@@ -317,11 +318,54 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
     return DefaultTabController(
       length: 2, // 因為有兩個標籤頁：'我的比賽'和'可報名比賽'
       child: Scaffold(
+        backgroundColor: Colors.white,
         appBar: AppBar(
-          title: const Text('運動員首頁'),
+          backgroundColor: primaryColor,
+          title: const Text('運動員主頁'),
           elevation: 0, // 移除陰影
-          backgroundColor: Colors.white,
-          foregroundColor: primaryColor,
+          foregroundColor: Colors.white,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                _loadUserCompetitions();
+                _loadAvailableCompetitions();
+                HapticFeedback.mediumImpact(); // 添加震動反饋
+              },
+            ),
+            // 添加SQLite測試按鈕
+            IconButton(
+              icon: const Icon(Icons.storage),
+              tooltip: 'SQLite測試',
+              onPressed: () {
+                Navigator.pushNamed(context, '/sqlite_test');
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.exit_to_app),
+              onPressed: () async {
+                // 登出並返回登入頁
+                await _authMethods.signOut();
+                if (mounted) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(),
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+          bottom: const TabBar(
+            indicatorColor: Colors.white,
+            indicatorWeight: 3,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            tabs: [
+              Tab(text: '我的比賽'),
+              Tab(text: '可報名比賽'),
+            ],
+          ),
         ),
         body: Column(
           children: [
@@ -380,6 +424,15 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
               ),
             ),
           ],
+        ),
+        // 添加浮動按鈕進入SQLite測試頁面
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () {
+            Navigator.pushNamed(context, '/sqlite_test');
+          },
+          backgroundColor: Colors.orange,
+          icon: const Icon(Icons.storage),
+          label: const Text('測試SQLite'),
         ),
       ),
     );

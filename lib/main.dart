@@ -12,6 +12,7 @@ import 'screens/athlete_edit_profile_screen.dart';
 import 'data/competition_data.dart';
 import 'data/database_helper.dart';
 import 'firebase_options.dart';
+import 'screens/sqlite_test_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -102,6 +103,7 @@ class SportsEventApp extends StatelessWidget {
                   ModalRoute.of(context)?.settings.arguments as String? ?? '',
             ),
         '/competition-view': (context) => const AthleteCompetitionViewScreen(),
+        '/sqlite_test': (context) => const SQLiteTestScreen(),
       },
     );
   }
