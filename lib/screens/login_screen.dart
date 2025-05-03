@@ -51,6 +51,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> loginUser() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('請填寫電子郵件和密碼')),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -63,12 +70,16 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
 
+      if (!mounted) return; // 檢查組件是否還掛載
+
       if (res == "success") {
         // 獲取用戶資料
         DocumentSnapshot userDoc = await _firestore
             .collection('users')
             .doc(_auth.currentUser!.uid)
             .get();
+
+        if (!mounted) return; // 再次檢查組件是否還掛載
 
         if (userDoc.exists) {
           Map<String, dynamic> userData =
@@ -78,53 +89,43 @@ class _LoginScreenState extends State<LoginScreen> {
           // 根據用戶角色導航到不同頁面
           if (userRole == 'referee') {
             // 裁判角色導航到比賽管理頁面
-            if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CompetitionManagementScreen(),
-                ),
-              );
-            }
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CompetitionManagementScreen(),
+              ),
+            );
           } else if (userRole == 'athlete') {
             // 運動員角色導航到運動員首頁
-            if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AthleteHomeScreen(
-                    userId: _auth.currentUser!.uid,
-                  ),
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AthleteHomeScreen(
+                  userId: _auth.currentUser!.uid,
                 ),
-              );
-            }
+              ),
+            );
           } else {
             // 其他角色導航到個人資料頁面
-            if (mounted) {
-              Navigator.pushReplacementNamed(context, '/athlete-edit-profile');
-            }
+            Navigator.pushReplacementNamed(context, '/athlete-edit-profile');
           }
         } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('找不到用戶資料')),
-            );
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('找不到用戶資料')),
+          );
         }
       } else {
         // 登入失敗
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(res)),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('登入失敗: $e')),
+          SnackBar(content: Text(res)),
         );
       }
+    } catch (e) {
+      if (!mounted) return; // 檢查組件是否還掛載
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('登入失敗: $e')),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -138,6 +139,62 @@ class _LoginScreenState extends State<LoginScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const RegisterScreen()),
+    );
+  }
+
+  void _showForgotPasswordDialog() {
+    final TextEditingController emailController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重設密碼'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('請輸入您的電子郵件，我們將發送重設密碼的連結'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                hintText: '電子郵件',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await _auth.sendPasswordResetEmail(
+                  email: emailController.text.trim(),
+                );
+
+                if (!mounted) return;
+
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('重設密碼連結已發送至您的郵箱')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('發送失敗: $e')),
+                );
+              }
+            },
+            child: const Text('發送'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -175,7 +232,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () {},
+            onPressed: _showForgotPasswordDialog,
             child: const Text(
               '忘記密碼？',
               style: TextStyle(color: primaryColor),
@@ -203,7 +260,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   decoration: BoxDecoration(
                     color: primaryColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: primaryColor, width: 1.0),
                   ),
                   child: Row(
