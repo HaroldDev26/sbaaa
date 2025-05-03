@@ -60,6 +60,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       },
     );
 
+    if (!mounted) return; // 添加 mounted 檢查
+
     if (picked != null) {
       setState(() {
         _birthdayController.text = DateFormat('yyyy-MM-dd').format(picked);
@@ -92,7 +94,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withValues(alpha: 0.2),
+                      color: Colors.grey.withOpacity(0.2),
                       spreadRadius: 2,
                       blurRadius: 5,
                       offset: const Offset(0, 3),
@@ -277,6 +279,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           password: _passwordController.text.trim(),
         );
 
+        if (!mounted) return; // 添加 mounted 檢查
+
         // ✅ 自動寫入 Firestore 的 users 集合
         await firestore.collection('users').doc(userCred.user!.uid).set({
           'uid': userCred.user!.uid,
@@ -286,7 +290,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'role': 'athlete', // 或 future admin 用來區分
           'gender': _gender,
           'createdAt': FieldValue.serverTimestamp(),
+          'username': _emailController.text.split('@')[0], // 新增用戶名欄位，使用郵箱前綴
         });
+
+        if (!mounted) return; // 添加 mounted 檢查
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('註冊成功！')),
@@ -304,6 +311,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           );
         }
       } on FirebaseAuthException catch (e) {
+        if (!mounted) return; // 添加 mounted 檢查
+
         String msg = '註冊失敗';
         if (e.code == 'email-already-in-use') {
           msg = '該電子郵件已註冊';
@@ -317,7 +326,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           SnackBar(content: Text(msg)),
         );
       } finally {
-        setState(() => _isLoading = false);
+        if (mounted) {
+          // 添加 mounted 檢查
+          setState(() => _isLoading = false);
+        }
       }
     }
   }
