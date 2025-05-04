@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../utils/searching_function.dart';
 import 'event_result_screen.dart';
 import '../../data/global_data_manager.dart';
 
@@ -25,7 +26,6 @@ class _ResultManageScreenState extends State<ResultManageScreen> {
   String _selectedType = '全部';
   final List<String> _eventTypes = ['全部', '徑賽', '田賽', '接力'];
   bool _isLoading = true;
-  bool _migrationDone = false;
 
   @override
   void initState() {
@@ -43,7 +43,6 @@ class _ResultManageScreenState extends State<ResultManageScreen> {
           await _dataManager.migrateFieldResults(widget.competitionId);
 
       if (migratedCount > 0) {
-        _migrationDone = true;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -100,15 +99,16 @@ class _ResultManageScreenState extends State<ResultManageScreen> {
 
   void _filterResults() {
     setState(() {
-      _filteredResults = _allResults.where((result) {
-        final nameMatch = result['eventName']
-            .toString()
-            .toLowerCase()
-            .contains(_searchText.toLowerCase());
-        final typeMatch = _selectedType == '全部' ||
-            (result['eventType'] ?? '').toString() == _selectedType;
-        return nameMatch && typeMatch;
-      }).toList();
+      Map<String, dynamic> filters = {};
+      if (_selectedType != '全部') {
+        filters['category'] = _selectedType;
+      }
+
+      _filteredResults = searchEvents(
+        _allResults,
+        _searchText.toLowerCase(),
+        filters,
+      );
     });
   }
 

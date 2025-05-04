@@ -63,6 +63,14 @@ class _TeamScoreRankingState extends State<TeamScoreRanking> {
         if (data.containsKey('results') && data['results'] is List) {
           List<dynamic> results = data['results'] as List;
 
+          // 判斷是否為接力項目
+          bool isRelay = false;
+          String eventName = data['eventName']?.toString() ?? '';
+          String eventType = data['eventType']?.toString() ?? '';
+          if (eventType == '接力' || eventName.toLowerCase().contains('接力')) {
+            isRelay = true;
+          }
+
           for (var athlete in results) {
             if (athlete['rank'] == null) continue;
 
@@ -71,12 +79,13 @@ class _TeamScoreRankingState extends State<TeamScoreRanking> {
 
             // 如果沒有學校信息，收集起來以便後續查詢
             if (school.isEmpty) {
-              athletesNeedingSchool.add(athlete);
+              athletesNeedingSchool.add({...athlete, 'isRelay': isRelay});
               continue;
             }
 
             // 根據名次計算積分
-            int points = _calculatePointsForRank(athlete['rank']);
+            int points =
+                _calculatePointsForRank(athlete['rank'], isRelay: isRelay);
             _teamScores[school] = (_teamScores[school] ?? 0) + points;
           }
         }
@@ -90,7 +99,9 @@ class _TeamScoreRankingState extends State<TeamScoreRanking> {
         for (var athlete in athletesNeedingSchool) {
           String school = getAthleteSchool(athlete);
           if (school.isNotEmpty && athlete['rank'] != null) {
-            int points = _calculatePointsForRank(athlete['rank']);
+            bool isRelay = athlete['isRelay'] ?? false;
+            int points =
+                _calculatePointsForRank(athlete['rank'], isRelay: isRelay);
             _teamScores[school] = (_teamScores[school] ?? 0) + points;
           }
         }
@@ -112,27 +123,40 @@ class _TeamScoreRankingState extends State<TeamScoreRanking> {
   }
 
   // 根據名次計算積分
-  int _calculatePointsForRank(int rank) {
+  int _calculatePointsForRank(int rank, {bool isRelay = false}) {
+    int baseScore = 0;
     switch (rank) {
       case 1:
-        return 10; // 第一名 10分
+        baseScore = 11; // 第一名 11分
+        break;
       case 2:
-        return 8; // 第二名 8分
+        baseScore = 9; // 第二名 9分
+        break;
       case 3:
-        return 6; // 第三名 6分
+        baseScore = 7; // 第三名 7分
+        break;
       case 4:
-        return 5; // 第四名 5分
+        baseScore = 5; // 第四名 5分
+        break;
       case 5:
-        return 4; // 第五名 4分
+        baseScore = 4; // 第五名 4分
+        break;
       case 6:
-        return 3; // 第六名 3分
+        baseScore = 3; // 第六名 3分
+        break;
       case 7:
-        return 2; // 第七名 2分
+        baseScore = 2; // 第七名 2分
+        break;
       case 8:
-        return 1; // 第八名 1分
+        baseScore = 1; // 第八名 1分
+        break;
       default:
-        return 0; // 其他名次不得分
+        baseScore = 0; // 其他名次不得分
+        break;
     }
+
+    // 接力項目得分翻倍
+    return isRelay ? baseScore * 2 : baseScore;
   }
 
   // 獲取運動員的學校

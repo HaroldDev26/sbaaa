@@ -376,7 +376,7 @@ class _AthleteEditProfileScreenState extends State<AthleteEditProfileScreen> {
                                         ),
                                         title: Text(group['name']),
                                         subtitle: Text(
-                                            '${group['minAge']}-${group['maxAge']}歲'),
+                                            '${group['startAge']}-${group['endAge']}歲'),
                                         dense: true,
                                       );
                                     }).toList(),
@@ -433,19 +433,23 @@ class _AthleteEditProfileScreenState extends State<AthleteEditProfileScreen> {
           final List<dynamic> ageGroups = data['metadata']['age_groups'];
 
           for (var group in ageGroups) {
-            if (group is Map<String, dynamic> &&
-                group.containsKey('minAge') &&
-                group.containsKey('maxAge') &&
-                group.containsKey('name')) {
-              final int minAge = group['minAge'];
-              final int maxAge = group['maxAge'];
+            if (group is Map<String, dynamic>) {
+              // 兼容不同的字段名稱
+              final int? startAge =
+                  group['startAge'] as int? ?? group['minAge'] as int?;
+              final int? endAge =
+                  group['endAge'] as int? ?? group['maxAge'] as int?;
+              final String name = group['name'] as String? ?? '未命名組';
 
               // 檢查用戶年齡是否在範圍內
-              if (age >= minAge && age <= maxAge) {
+              if (startAge != null &&
+                  endAge != null &&
+                  age >= startAge &&
+                  age <= endAge) {
                 // 檢查此組別是否已添加
                 bool exists = false;
                 for (var existing in eligibleGroups) {
-                  if (existing['name'] == group['name']) {
+                  if (existing['name'] == name) {
                     exists = true;
                     break;
                   }
@@ -453,9 +457,9 @@ class _AthleteEditProfileScreenState extends State<AthleteEditProfileScreen> {
 
                 if (!exists) {
                   final Map<String, dynamic> groupInfo = {
-                    'name': group['name'],
-                    'minAge': minAge,
-                    'maxAge': maxAge,
+                    'name': name,
+                    'startAge': startAge,
+                    'endAge': endAge,
                     'color': group['color'] ?? '#4CAF50',
                   };
 

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'package:file_picker/file_picker.dart';
 import '../utils/colors.dart';
 import '../models/competition.dart';
 import '../data/competition_data.dart'; // 導入數據管理類
@@ -114,14 +113,50 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
     }
 
     // 載入比賽項目
-    if (competition.events != null) {
-      _events = competition.events!.map((e) => e['name'].toString()).toList();
-      _eventsController.text = _events.join(',');
+    _events = [];
+    // 1. 檢查events欄位
+    if (competition.events != null && competition.events!.isNotEmpty) {
+      debugPrint(
+          '📋 從competition.events載入比賽項目 (${competition.events!.length}個)');
+      for (var event in competition.events!) {
+        if (event.containsKey('name')) {
+          _events.add(event['name'].toString());
+        }
+      }
     }
+    // 2. 如果events為空，嘗試從metadata.events獲取
+    else if (competition.metadata != null &&
+        competition.metadata!.containsKey('events') &&
+        competition.metadata!['events'] != null) {
+      var metadataEvents = competition.metadata!['events'];
+      debugPrint('📋 從competition.metadata.events載入比賽項目');
+
+      if (metadataEvents is List) {
+        for (var event in metadataEvents) {
+          if (event is Map<String, dynamic> && event.containsKey('name')) {
+            _events.add(event['name'].toString());
+          } else if (event is String) {
+            _events.add(event);
+          }
+        }
+      } else if (metadataEvents is Map) {
+        metadataEvents.forEach((key, value) {
+          if (value is Map<String, dynamic> && value.containsKey('name')) {
+            _events.add(value['name'].toString());
+          } else if (value is String) {
+            _events.add(value);
+          }
+        });
+      }
+    }
+
+    debugPrint('✅ 比賽項目載入完成: $_events');
+    _eventsController.text = _events.join(', ');
 
     // 載入年齡分組
     final ageGroups =
         AgeGroupHandler.loadAgeGroupsFromMetadata(competition.metadata);
+    _ageGroups = ageGroups;
     final displayText = AgeGroupHandler.convertAgeGroupsToDisplay(ageGroups);
     _ageGroupsController.text = displayText;
   }
@@ -320,7 +355,13 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
     if (result != null) {
       setState(() {
         _eventsController.text = result;
-        _events = result.split(',').where((e) => e.trim().isNotEmpty).toList();
+        // 分割字符串，並移除空白項
+        _events = result
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+        debugPrint('📝 更新比賽項目: $_events');
       });
     }
   }
@@ -648,28 +689,6 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
     );
   }
 
-  // 導入Excel文件
-  Future<void> _importExcel() async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['xlsx', 'xls', 'csv'],
-      );
-
-      if (result != null) {
-        // 這裡需要實現解析Excel的邏輯
-        // 目前只是顯示一個提示
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已選擇文件: ${result.files.single.name}')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('選擇文件失敗: $e')),
-      );
-    }
-  }
-
   // 提交表單
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
@@ -698,9 +717,6 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
           throw Exception('至少需要一個年齡組別');
         }
 
-        // 將年齡組別轉換為規範格式
-        final ageGroupsForSubmit = _ageGroups;
-
         // 準備比賽數據
         final Map<String, dynamic> competitionData = {
           'id': competitionId,
@@ -711,15 +727,21 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
           'endDate': _endDateController.text,
           'status': '比賽',
           'createdBy': createdBy,
-          'createdByUid': uid,
           'createdAt': now.toIso8601String(),
           'metadata': {
             'targetAudience': _targetAudience,
             'registration_form_created': false,
             'age_groups': _ageGroups,
           },
-          'events': _events.map((e) => {'name': e, 'status': '比賽'}).toList(),
-          'createdByUid': uid,
+          // 將字符串項目轉換為對象列表
+          'events': _events
+              .map((e) => {
+                    'name': e,
+                    'status': '比賽',
+                    'description': '',
+                    'eventType': '徑賽'
+                  })
+              .toList(),
           'owner': {
             'uid': uid,
             'username': createdBy,
@@ -732,6 +754,16 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
             'canManage': [uid]
           }
         };
+
+        // 為了兼容舊版，也將比賽項目存儲在metadata中
+        competitionData['metadata']['events'] = _events
+            .map((e) => {
+                  'name': e,
+                  'status': '比賽',
+                  'description': '',
+                  'eventType': '徑賽'
+                })
+            .toList();
 
         if (_isEditMode && widget.competition != null) {
           // 編輯模式：保留原始創建者資訊
@@ -825,12 +857,6 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
         ),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('返回', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -1141,27 +1167,6 @@ class _CreateCompetitionScreenState extends State<CreateCompetitionScreen> {
                 ),
 
                 const SizedBox(height: 32),
-
-                // 導入Excel按鈕
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: OutlinedButton(
-                    onPressed: _importExcel,
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: primaryColor),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      '導入 Excel',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
 
                 // 提交按鈕
                 SizedBox(

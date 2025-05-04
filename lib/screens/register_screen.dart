@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import '../widgets/custom_button.dart';
 import 'athlete_home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -33,25 +34,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  // 顯示日期選擇器並更新日期
+  // Display date picker and update date
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate:
-          DateTime.now().subtract(const Duration(days: 365 * 18)), // 預設18歲
-      firstDate: DateTime(1940), // 最早可選日期
-      lastDate: DateTime.now(), // 最晚可選日期（今天）
+      initialDate: DateTime.now()
+          .subtract(const Duration(days: 365 * 18)), // Default 18 years old
+      firstDate: DateTime(1940), // Earliest selectable date
+      lastDate: DateTime.now(), // Latest selectable date (today)
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF1A237E), // 日期選擇器主要顏色
-              onPrimary: Colors.white, // 選中日期的文字顏色
-              onSurface: Colors.black, // 日曆文字顏色
+              primary: Color(0xFF1A237E), // Date picker primary color
+              onPrimary: Colors.white, // Selected date text color
+              onSurface: Colors.black, // Calendar text color
             ),
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF1A237E), // 按鈕文字顏色
+                foregroundColor: const Color(0xFF1A237E), // Button text color
               ),
             ),
           ),
@@ -60,7 +61,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       },
     );
 
-    if (!mounted) return; // 添加 mounted 檢查
+    if (!mounted) return; // Add mounted check
 
     if (picked != null) {
       setState(() {
@@ -80,7 +81,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('註冊', style: TextStyle(color: Colors.black)),
+        title: const Text('Register', style: TextStyle(color: Colors.black)),
       ),
       body: Stack(
         children: [
@@ -106,117 +107,131 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('個人資料',
+                      const Text('Personal Information',
                           style: TextStyle(
                               fontSize: 20, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 20),
                       _buildTextField(
-                          label: '電子郵件',
+                          label: 'Email',
                           hint: 'your@email.com',
                           controller: _emailController,
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return '請輸入電子郵件';
+                              return 'Please enter an email address';
                             }
-                            if (!value.contains('@') || !value.contains('.')) {
-                              return '請輸入有效的電子郵件';
+                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                .hasMatch(value)) {
+                              return 'Invalid email format';
                             }
                             return null;
                           }),
                       _buildTextField(
-                        label: '電話號碼',
+                        label: 'Phone Number',
                         hint: '0912345678',
                         controller: _phoneController,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return null; // Phone number is optional
+                          }
+                          if (!RegExp(r'^[0-9]{8,10}$').hasMatch(value)) {
+                            return 'Please enter a valid phone number';
+                          }
+                          return null;
+                        },
                       ),
-                      // 日期選擇欄位
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: TextFormField(
-                          controller: _birthdayController,
-                          readOnly: true, // 設為只讀，不允許直接輸入
-                          decoration: InputDecoration(
-                            labelText: '出生日期',
-                            hintText: '選擇日期',
-                            border: const OutlineInputBorder(),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.calendar_today),
-                              onPressed: () => _selectDate(context),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return '請選擇出生日期';
-                            }
-                            return null;
-                          },
-                          onTap: () => _selectDate(context), // 點擊欄位也會彈出選擇器
-                        ),
-                      ),
+                      // Date selection field
+                      _buildDateField(),
                       DropdownButtonFormField<String>(
                         decoration: const InputDecoration(
-                          labelText: '性別',
+                          labelText: 'Gender',
                           border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 16),
+                          filled: true,
+                          fillColor: Color(0xFFF5F5F5),
                         ),
                         value: _gender,
-                        items: ['男', '女']
-                            .map((g) => DropdownMenuItem(
-                                  value: g,
-                                  child: Text(g),
-                                ))
-                            .toList(),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'Male',
+                            child: Text('Male'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Female',
+                            child: Text('Female'),
+                          ),
+                        ],
                         onChanged: (value) => setState(() => _gender = value),
-                        validator: (value) => value == null ? '請選擇性別' : null,
+                        validator: (value) =>
+                            value == null ? 'Please select a gender' : null,
                       ),
                       const SizedBox(height: 10),
                       _buildTextField(
-                        label: '密碼',
+                        label: 'Password',
                         obscureText: true,
                         controller: _passwordController,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return '請輸入密碼';
+                            return 'Please enter a password';
                           }
-                          if (value.length < 6 ||
-                              !RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)')
-                                  .hasMatch(value)) {
-                            return '密碼須包含大小寫字母與數字，且長度不少於6位';
+                          if (value.length < 6) {
+                            return 'Password must be at least 6 characters';
+                          }
+                          if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)')
+                              .hasMatch(value)) {
+                            return 'Password must include uppercase, lowercase letters and numbers';
                           }
                           return null;
                         },
                       ),
                       _buildTextField(
-                        label: '確認密碼',
+                        label: 'Confirm Password',
                         obscureText: true,
                         controller: _confirmPasswordController,
                         validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please confirm your password';
+                          }
                           if (value != _passwordController.text) {
-                            return '密碼不一致';
+                            return 'Passwords do not match';
                           }
                           return null;
                         },
                       ),
                       const SizedBox(height: 10),
-                      const Text(
-                        '密碼必須包含大小寫字母和數字',
-                        style: TextStyle(color: Colors.red, fontSize: 12),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline,
+                                color: Colors.grey, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Password must include uppercase, lowercase letters and numbers',
+                                style: TextStyle(
+                                    color: Colors.grey.shade700, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _onRegisterPressed,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1A237E),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text(
-                            '註冊',
-                            style: TextStyle(fontSize: 16, color: Colors.white),
-                          ),
-                        ),
+                      // Use improved CustomButton with icon
+                      CustomButton(
+                        text: 'Register',
+                        onTap: _onRegisterPressed,
+                        isLoading: _isLoading,
+                        backgroundColor: const Color(0xFF1A237E),
+                        borderRadius: 8,
+                        height: 56,
+                        icon: const Icon(Icons.person_add),
+                        hasShadow: true,
                       ),
                     ],
                   ),
@@ -225,7 +240,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
 
-          // ⏳ Loading 遮罩
+          // Loading overlay
           if (_isLoading)
             Container(
               color: Colors.black54,
@@ -246,7 +261,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     String? Function(String?)? validator,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: controller,
         obscureText: obscureText,
@@ -254,82 +269,159 @@ class _RegisterScreenState extends State<RegisterScreen> {
           labelText: label,
           hintText: hint,
           border: const OutlineInputBorder(),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          filled: true,
+          fillColor: Colors.grey.shade50,
         ),
-        validator: validator ??
-            (value) {
-              if (value == null || value.isEmpty) {
-                return '請輸入$label';
-              }
-              return null;
-            },
+        validator: validator,
       ),
     );
   }
 
-  Future<void> _onRegisterPressed() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+  Widget _buildDateField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: _birthdayController,
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: 'Date of Birth',
+          hintText: 'Select date',
+          border: const OutlineInputBorder(),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          filled: true,
+          fillColor: Colors.grey.shade50,
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.calendar_today),
+            onPressed: () => _selectDate(context),
+          ),
+        ),
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'Please select a date of birth';
+          }
 
-      try {
-        final auth = FirebaseAuth.instance;
-        final firestore = FirebaseFirestore.instance;
+          // Check date format and validate if date is reasonable
+          try {
+            final date = DateFormat('yyyy-MM-dd').parse(value);
+            final now = DateTime.now();
 
-        UserCredential userCred = await auth.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+            // Check if future date is selected
+            if (date.isAfter(now)) {
+              return 'Date of birth cannot be in the future';
+            }
 
-        if (!mounted) return; // 添加 mounted 檢查
+            // Check if age is reasonable (e.g., not under 6 years old, not over 100 years old)
+            final age = now.year -
+                date.year -
+                (now.month < date.month ||
+                        (now.month == date.month && now.day < date.day)
+                    ? 1
+                    : 0);
 
-        // ✅ 自動寫入 Firestore 的 users 集合
-        await firestore.collection('users').doc(userCred.user!.uid).set({
-          'uid': userCred.user!.uid,
-          'email': _emailController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'birthday': _birthdayController.text,
-          'role': 'athlete', // 或 future admin 用來區分
-          'gender': _gender,
-          'createdAt': FieldValue.serverTimestamp(),
-          'username': _emailController.text.split('@')[0], // 新增用戶名欄位，使用郵箱前綴
-        });
+            if (age < 6) {
+              return 'Age must be at least 6 years old';
+            }
+            if (age > 100) {
+              return 'Please enter a valid date of birth';
+            }
+          } catch (e) {
+            return 'Please enter a valid date format';
+          }
 
-        if (!mounted) return; // 添加 mounted 檢查
+          return null;
+        },
+        onTap: () => _selectDate(context),
+      ),
+    );
+  }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('註冊成功！')),
-        );
+  void _onRegisterPressed() async {
+    // Validate form
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
-        // 註冊成功後直接導向運動員首頁
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => AthleteHomeScreen(
-                userId: userCred.user!.uid,
-              ),
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Confirm password match
+      if (_passwordController.text != _confirmPasswordController.text) {
+        throw Exception("Passwords do not match");
+      }
+
+      // Create Firebase user
+      UserCredential userCredential =
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+
+      // Save user information to Firestore
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+        'email': _emailController.text,
+        'phone': _phoneController.text,
+        'birthday': _birthdayController.text,
+        'gender': _gender,
+        'role': 'athlete', // Default role is athlete
+        'username':
+            _emailController.text.split('@')[0], // Use email prefix as username
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        // Registration successful, navigate to athlete home page
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AthleteHomeScreen(
+              userId: userCredential.user!.uid,
             ),
-          );
-        }
-      } on FirebaseAuthException catch (e) {
-        if (!mounted) return; // 添加 mounted 檢查
-
-        String msg = '註冊失敗';
-        if (e.code == 'email-already-in-use') {
-          msg = '該電子郵件已註冊';
-        } else if (e.code == 'invalid-email') {
-          msg = '電子郵件格式錯誤';
-        } else if (e.code == 'weak-password') {
-          msg = '密碼太弱，請至少6位數';
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg)),
+          ),
         );
-      } finally {
-        if (mounted) {
-          // 添加 mounted 檢查
-          setState(() => _isLoading = false);
-        }
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage;
+
+      if (e.code == 'email-already-in-use') {
+        errorMessage = 'Email address is already registered';
+      } else if (e.code == 'weak-password') {
+        errorMessage = 'Password is too weak';
+      } else if (e.code == 'invalid-email') {
+        errorMessage = 'Invalid email format';
+      } else {
+        errorMessage = 'Registration failed: ${e.message}';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Registration failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }

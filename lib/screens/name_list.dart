@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 import '../utils/age_group_handler.dart';
 
 class NameListScreen extends StatefulWidget {

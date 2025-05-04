@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../utils/searching_function.dart';
 import 'event_result_screen.dart';
 import '../../services/scoring_service.dart';
+import '../../utils/sorting_function.dart';
 
 class TrackEventTimerScreen extends StatefulWidget {
   final String competitionId;
@@ -124,12 +126,11 @@ class _TrackEventTimerScreenState extends State<TrackEventTimerScreen> {
       }
 
       // 排序：已檢錄的排前面，然後按選手號碼排序
-      athletes.sort((a, b) {
-        if (a['checkedIn'] != b['checkedIn']) {
-          return a['checkedIn'] ? -1 : 1;
-        }
-        return a['athleteNumber'].compareTo(b['athleteNumber']);
-      });
+      athletes = sortByAlphabet(athletes, 'athleteNumber');
+
+      // 按照檢錄狀態再次排序（已檢錄的排前面）
+      athletes = athletes.where((a) => a['checkedIn'] == true).toList() +
+          athletes.where((a) => a['checkedIn'] != true).toList();
 
       // 如果沒有找到選手，使用widget.athletes作為備選
       if (athletes.isEmpty && widget.athletes.isNotEmpty) {
@@ -315,12 +316,7 @@ class _TrackEventTimerScreenState extends State<TrackEventTimerScreen> {
 
     // 確保時間大於0
     if (currentCentiseconds > 0) {
-      // 檢查是否已有較好的成績
-      final existingTime = _athleteTimes[athleteId] ?? 0;
-      final shouldUpdate =
-          existingTime == 0 || currentCentiseconds < existingTime;
-
-      // 直接更新成績，無論新舊比較結果如何
+      // 直接更新成績
       setState(() {
         _athleteTimes[athleteId] = currentCentiseconds;
       });
@@ -947,12 +943,11 @@ class _TrackEventTimerScreenState extends State<TrackEventTimerScreen> {
 
                 const Divider(height: 1),
 
-                // 搜尋欄
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: TextField(
                     decoration: InputDecoration(
-                      hintText: '搜尋選手...',
+                      hintText: 'search for athlete...',
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -965,20 +960,9 @@ class _TrackEventTimerScreenState extends State<TrackEventTimerScreen> {
                         if (value.isEmpty) {
                           _filteredAthletes = _athletes;
                         } else {
-                          _filteredAthletes = _athletes.where((athlete) {
-                            final name =
-                                athlete['name'].toString().toLowerCase();
-                            final number = athlete['athleteNumber']
-                                .toString()
-                                .toLowerCase();
-                            final school =
-                                athlete['school']?.toString().toLowerCase() ??
-                                    '';
-                            final query = value.toLowerCase();
-                            return name.contains(query) ||
-                                number.contains(query) ||
-                                school.contains(query);
-                          }).toList();
+                          _filteredAthletes = searchAthletes(
+                              _athletes, value, {},
+                              isSorted: true, sortField: 'name');
                         }
                       });
                     },

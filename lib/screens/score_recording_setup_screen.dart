@@ -200,13 +200,6 @@ class _ScoreRecordingSetupScreenState extends State<ScoreRecordingSetupScreen> {
         title: Text('成績紀錄設定 - ${widget.competitionName}'),
         backgroundColor: const Color.fromARGB(255, 255, 255, 255),
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _saveEventTypes,
-            tooltip: '保存設定',
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

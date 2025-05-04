@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:logging/logging.dart';
 import 'competition_manager.dart';
+import 'dart:convert';
 
 class DatabaseHelper {
   // 單例模式
@@ -34,6 +35,10 @@ class DatabaseHelper {
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDatabase();
+
+    // 在獲取數據庫後立即檢查並升級結構
+    await upgradeDatabase();
+
     return _database!;
   }
 
@@ -116,7 +121,10 @@ class DatabaseHelper {
           end_date TEXT NOT NULL,
           status TEXT NOT NULL,
           created_by TEXT NOT NULL,
-          created_at TEXT NOT NULL
+          created_by_uid TEXT,
+          created_at TEXT NOT NULL,
+          events TEXT,
+          metadata TEXT
         )
       ''');
       _log.info('✅ 成功創建 $tableCompetition 表');
@@ -192,13 +200,16 @@ class DatabaseHelper {
 
   // 獲取所有比賽
   Future<List<Map<String, dynamic>>> getAllCompetitions() async {
+    // 確保先檢查和升級數據庫結構
+    await upgradeDatabase();
+
     Database db = await database;
     final result = await db.query(tableCompetition);
     _log.info('從數據庫獲取比賽數量: ${result.length}');
 
     // 將snake_case轉換為camelCase
     return result.map((row) {
-      return {
+      final Map<String, dynamic> compData = {
         'id': row['id'],
         'name': row['name'],
         'description': row['description'],
@@ -207,8 +218,30 @@ class DatabaseHelper {
         'endDate': row['end_date'],
         'status': row['status'],
         'createdBy': row['created_by'],
+        'createdByUid': row['created_by_uid'],
         'createdAt': row['created_at'],
       };
+
+      // 處理JSON格式的events和metadata
+      if (row['events'] != null) {
+        try {
+          compData['events'] = jsonDecode(row['events'].toString());
+          _log.info('📝 解析events JSON成功: ${compData['events']}');
+        } catch (jsonError) {
+          _log.warning('⚠️ 解析events JSON失敗: $jsonError');
+        }
+      }
+
+      if (row['metadata'] != null) {
+        try {
+          compData['metadata'] = jsonDecode(row['metadata'].toString());
+          _log.info('📝 解析metadata JSON成功: ${compData['metadata']}');
+        } catch (jsonError) {
+          _log.warning('⚠️ 解析metadata JSON失敗: $jsonError');
+        }
+      }
+
+      return compData;
     }).toList();
   }
 
@@ -220,12 +253,53 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
-    return results.isNotEmpty ? results.first : null;
+
+    if (results.isEmpty) {
+      return null;
+    }
+
+    // 轉換snake_case為camelCase並處理JSON
+    final row = results.first;
+    final Map<String, dynamic> compData = {
+      'id': row['id'],
+      'name': row['name'],
+      'description': row['description'],
+      'venue': row['venue'],
+      'startDate': row['start_date'],
+      'endDate': row['end_date'],
+      'status': row['status'],
+      'createdBy': row['created_by'],
+      'createdByUid': row['created_by_uid'],
+      'createdAt': row['created_at'],
+    };
+
+    // 處理JSON格式的events和metadata
+    if (row['events'] != null) {
+      try {
+        compData['events'] = jsonDecode(row['events'].toString());
+        _log.info('📝 解析events JSON成功: ${compData['events']}');
+      } catch (jsonError) {
+        _log.warning('⚠️ 解析events JSON失敗: $jsonError');
+      }
+    }
+
+    if (row['metadata'] != null) {
+      try {
+        compData['metadata'] = jsonDecode(row['metadata'].toString());
+        _log.info('📝 解析metadata JSON成功: ${compData['metadata']}');
+      } catch (jsonError) {
+        _log.warning('⚠️ 解析metadata JSON失敗: $jsonError');
+      }
+    }
+
+    return compData;
   }
 
   // 更新比賽
   Future<int> updateCompetition(
       String id, Map<String, dynamic> competition) async {
+    _log.info('更新比賽 ID: $id, 數據: $competition');
+
     Database db = await database;
 
     // 創建與數據庫列名對應的數據
@@ -237,15 +311,52 @@ class DatabaseHelper {
       'end_date': competition['endDate'],
       'status': competition['status'],
       'created_by': competition['createdBy'],
+      'created_by_uid': competition['createdByUid'],
       'created_at': competition['createdAt'],
     };
 
-    return await db.update(
+    // 處理events和metadata欄位，將其轉換為JSON字符串
+    if (competition['events'] != null) {
+      dbCompetition['events'] = jsonEncode(competition['events']);
+      _log.info('📝 轉換events為JSON: ${dbCompetition['events']}');
+    }
+
+    if (competition['metadata'] != null) {
+      dbCompetition['metadata'] = jsonEncode(competition['metadata']);
+      _log.info('📝 轉換metadata為JSON: ${dbCompetition['metadata']}');
+    }
+
+    // 更新數據庫
+    final result = await db.update(
       tableCompetition,
       dbCompetition,
       where: 'id = ?',
       whereArgs: [id],
     );
+
+    _log.info('更新結果: $result, ID: $id');
+
+    // 驗證更新是否成功
+    if (result > 0) {
+      final check = await db.query(tableCompetition,
+          where: 'id = ?',
+          whereArgs: [id],
+          columns: ['id', 'name', 'events', 'metadata']);
+
+      if (check.isNotEmpty) {
+        _log.info('✓ 驗證成功: 已更新比賽 ${check.first['name']}');
+
+        // 檢查events和metadata是否已更新
+        if (check.first['events'] != null) {
+          _log.info('✓ events已更新: ${check.first['events']}');
+        }
+        if (check.first['metadata'] != null) {
+          _log.info('✓ metadata已更新: ${check.first['metadata']}');
+        }
+      }
+    }
+
+    return result;
   }
 
   // 刪除比賽
@@ -324,5 +435,67 @@ class DatabaseHelper {
   // 刪除比賽 - 為了兼容性
   Future<int> delete(String id) async {
     return await deleteCompetition(id);
+  }
+
+  // 升級數據庫結構
+  Future<void> upgradeDatabase() async {
+    try {
+      final db = await _database!;
+      _log.info('📝 檢查並更新數據庫結構...');
+
+      // 檢查表結構
+      final tableInfo =
+          await db.rawQuery("PRAGMA table_info($tableCompetition)");
+      bool hasEventsColumn = false;
+      bool hasMetadataColumn = false;
+      bool hasCreatedByUidColumn = false;
+
+      for (var column in tableInfo) {
+        final colName = column['name'].toString();
+        if (colName == 'events') hasEventsColumn = true;
+        if (colName == 'metadata') hasMetadataColumn = true;
+        if (colName == 'created_by_uid') hasCreatedByUidColumn = true;
+      }
+
+      _log.info(
+          '📊 當前結構: events欄位=${hasEventsColumn}, metadata欄位=${hasMetadataColumn}, created_by_uid欄位=${hasCreatedByUidColumn}');
+
+      // 開始事務以確保所有更改一起應用
+      await db.transaction((txn) async {
+        // 添加缺少的列
+        if (!hasEventsColumn) {
+          await txn
+              .execute("ALTER TABLE $tableCompetition ADD COLUMN events TEXT");
+          _log.info('✅ 已添加events欄位');
+        }
+
+        if (!hasMetadataColumn) {
+          await txn.execute(
+              "ALTER TABLE $tableCompetition ADD COLUMN metadata TEXT");
+          _log.info('✅ 已添加metadata欄位');
+        }
+
+        if (!hasCreatedByUidColumn) {
+          await txn.execute(
+              "ALTER TABLE $tableCompetition ADD COLUMN created_by_uid TEXT");
+          _log.info('✅ 已添加created_by_uid欄位');
+        }
+      });
+
+      // 報告升級結果
+      if (!hasEventsColumn || !hasMetadataColumn || !hasCreatedByUidColumn) {
+        _log.info('🔄 資料庫結構已更新');
+      } else {
+        _log.info('✓ 資料庫結構已是最新');
+      }
+
+      // 重新檢查結構以驗證更新
+      final updatedTableInfo =
+          await db.rawQuery("PRAGMA table_info($tableCompetition)");
+      _log.info('🔍 更新後的表結構: $updatedTableInfo');
+    } catch (e, stackTrace) {
+      _log.severe('❌ 升級數據庫結構失敗: $e');
+      _log.severe('堆疊追蹤: $stackTrace');
+    }
   }
 }

@@ -42,6 +42,15 @@ void main() async {
     // 使用DatabaseHelper初始化
     final dbHelper = DatabaseHelper();
     await dbHelper.database; // 確保數據庫初始化
+
+    // 執行數據庫升級檢查
+    try {
+      await dbHelper.upgradeDatabase();
+      log.info('✅ 數據庫結構檢查與升級完成');
+    } catch (upgradeError) {
+      log.warning('⚠️ 數據庫結構升級過程出現問題: $upgradeError');
+    }
+
     final path = await dbHelper.getDatabasePath();
     final count = await dbHelper.getCompetitionCount();
     log.info('數據庫初始化成功! 路徑: $path, 比賽數量: $count');

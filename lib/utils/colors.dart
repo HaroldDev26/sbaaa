@@ -14,9 +14,9 @@ extension ColorExtension on Color {
   /// alpha 參數範圍應在 0.0 到 1.0 之間
   Color withValues({int? red, int? green, int? blue, double? alpha}) {
     return Color.fromRGBO(
-      red ?? this.red,
-      green ?? this.green,
-      blue ?? this.blue,
+      red ?? this.r.toInt(),
+      green ?? this.g.toInt(),
+      blue ?? this.b.toInt(),
       alpha ?? this.opacity,
     );
   }
