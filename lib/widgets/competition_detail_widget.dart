@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../models/competition_model.dart';
 import 'package:intl/intl.dart';
 import '../utils/age_group_handler.dart'; // 導入年齡分組處理工具
-import 'package:flutter/foundation.dart'; // 添加這一行以使用 debugPrint
 
 // 定義比賽報名狀態枚舉
 enum RegistrationStatus {
