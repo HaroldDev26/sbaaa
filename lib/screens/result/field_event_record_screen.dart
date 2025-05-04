@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../../utils/searching_function.dart';
 import '../../services/scoring_service.dart';
+import '../../utils/sorting_function.dart';
 
 class FieldEventRecordScreen extends StatefulWidget {
   final String competitionId;
@@ -23,7 +24,6 @@ class FieldEventRecordScreen extends StatefulWidget {
 
 class _FieldEventRecordScreenState extends State<FieldEventRecordScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final TextEditingController _searchController = TextEditingController();
   final ScoringService _scoringService = ScoringService();
 
@@ -34,7 +34,7 @@ class _FieldEventRecordScreenState extends State<FieldEventRecordScreen> {
   // 儲存每位選手三次嘗試的成績
   final Map<String, List<Map<String, dynamic>>> _attemptResults = {};
   // 犯規標記
-  static const String FOUL_MARKER = "FOUL";
+  static const String foulMarker = "FOUL";
 
   // 添加到類屬性
   final Map<String, List<TextEditingController>> _attemptControllers = {};
@@ -94,12 +94,11 @@ class _FieldEventRecordScreenState extends State<FieldEventRecordScreen> {
       }
 
       // 排序：已檢錄的排前面，然後按選手號碼排序
-      athletes.sort((a, b) {
-        if (a['checkedIn'] != b['checkedIn']) {
-          return a['checkedIn'] ? -1 : 1;
-        }
-        return a['athleteNumber'].compareTo(b['athleteNumber']);
-      });
+      athletes = sortByAlphabet(athletes, 'athleteNumber');
+
+      // 按照檢錄狀態再次排序（已檢錄的排前面）
+      athletes = athletes.where((a) => a['checkedIn'] == true).toList() +
+          athletes.where((a) => a['checkedIn'] != true).toList();
 
       // 載入已儲存的成績（如果有）
       await _loadSavedResults();
@@ -154,7 +153,7 @@ class _FieldEventRecordScreenState extends State<FieldEventRecordScreen> {
                         : null,
                     'isFoul': attempt['isFoul'] == true
                   });
-                } else if (attempt == FOUL_MARKER) {
+                } else if (attempt == foulMarker) {
                   // 舊格式犯規標記
                   attemptList.add({'value': null, 'isFoul': true});
                 } else {
@@ -185,17 +184,8 @@ class _FieldEventRecordScreenState extends State<FieldEventRecordScreen> {
       if (query.isEmpty) {
         _filteredAthletes = _athletes;
       } else {
-        // 自行實現線性搜索
-        _filteredAthletes = [];
-
-        for (final athlete in _athletes) {
-          final name = athlete['name'].toString().toLowerCase();
-          final number = athlete['athleteNumber'].toString().toLowerCase();
-
-          if (name.contains(query) || number.contains(query)) {
-            _filteredAthletes.add(athlete);
-          }
-        }
+        _filteredAthletes = searchAthletes(_athletes, query, {},
+            isSorted: true, sortField: 'name');
       }
     });
 

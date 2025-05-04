@@ -8,39 +8,100 @@ class AgeGroupHandler {
   static List<Map<String, dynamic>> loadAgeGroupsFromMetadata(
       Map<String, dynamic>? metadata) {
     List<Map<String, dynamic>> ageGroups = [];
-    try {
-      if (metadata != null && metadata['ageGroups'] != null) {
-        final dynamic ageGroupsData = metadata['ageGroups'];
+    bool hasFoundData = false;
 
-        if (ageGroupsData is List) {
-          for (var item in ageGroupsData) {
-            if (item is Map<String, dynamic>) {
-              ageGroups.add({
-                'name': item['name'] ?? '未命名',
-                'startAge': item['startAge'] ?? 0,
-                'endAge': item['endAge'] ?? 0,
-              });
+    try {
+      if (metadata != null) {
+        // 先檢查標準位置 metadata['age_groups']
+        if (metadata['age_groups'] != null) {
+          final dynamic ageGroupsData = metadata['age_groups'];
+          hasFoundData = true;
+          debugPrint('📋 找到age_groups數據: $ageGroupsData');
+
+          if (ageGroupsData is List) {
+            for (var item in ageGroupsData) {
+              if (item is Map<String, dynamic>) {
+                // 兼容不同的字段名稱
+                final startAge = item['startAge'] ?? item['minAge'] ?? 0;
+                final endAge = item['endAge'] ?? item['maxAge'] ?? 0;
+
+                ageGroups.add({
+                  'name': item['name'] ?? '未命名',
+                  'startAge': startAge,
+                  'endAge': endAge,
+                });
+              }
             }
+          } else if (ageGroupsData is Map<String, dynamic>) {
+            ageGroupsData.forEach((key, value) {
+              if (value is Map<String, dynamic>) {
+                // 兼容不同的字段名稱
+                final startAge = value['startAge'] ?? value['minAge'] ?? 0;
+                final endAge = value['endAge'] ?? value['maxAge'] ?? 0;
+
+                ageGroups.add({
+                  'name': value['name'] ?? '未命名',
+                  'startAge': startAge,
+                  'endAge': endAge,
+                });
+              }
+            });
           }
-        } else if (ageGroupsData is Map<String, dynamic>) {
-          ageGroupsData.forEach((key, value) {
-            if (value is Map<String, dynamic>) {
-              ageGroups.add({
-                'name': value['name'] ?? '未命名',
-                'startAge': value['startAge'] ?? 0,
-                'endAge': value['endAge'] ?? 0,
-              });
+        }
+        // 備用位置 metadata['ageGroups'] (camelCase)
+        else if (metadata['ageGroups'] != null) {
+          final dynamic ageGroupsData = metadata['ageGroups'];
+          hasFoundData = true;
+          debugPrint('📋 找到ageGroups數據 (camelCase): $ageGroupsData');
+
+          if (ageGroupsData is List) {
+            for (var item in ageGroupsData) {
+              if (item is Map<String, dynamic>) {
+                // 兼容不同的字段名稱
+                final startAge = item['startAge'] ?? item['minAge'] ?? 0;
+                final endAge = item['endAge'] ?? item['maxAge'] ?? 0;
+
+                ageGroups.add({
+                  'name': item['name'] ?? '未命名',
+                  'startAge': startAge,
+                  'endAge': endAge,
+                });
+              }
             }
-          });
+          } else if (ageGroupsData is Map<String, dynamic>) {
+            ageGroupsData.forEach((key, value) {
+              if (value is Map<String, dynamic>) {
+                // 兼容不同的字段名稱
+                final startAge = value['startAge'] ?? value['minAge'] ?? 0;
+                final endAge = value['endAge'] ?? value['maxAge'] ?? 0;
+
+                ageGroups.add({
+                  'name': value['name'] ?? '未命名',
+                  'startAge': startAge,
+                  'endAge': endAge,
+                });
+              }
+            });
+          }
         }
       }
     } catch (e) {
       debugPrint('處理年齡組別時出錯: $e');
     }
 
+    // 調試輸出
+    if (ageGroups.isNotEmpty) {
+      debugPrint('✅ 已成功解析年齡組別: $ageGroups');
+    } else if (hasFoundData) {
+      debugPrint('⚠️ 找到年齡組別數據，但無法解析有效內容');
+    } else {
+      debugPrint('⚠️ 未找到年齡組別數據，將使用默認值');
+    }
+
     // 如果沒有數據，添加默認組別
-    if (ageGroups.isEmpty) {
+    if (ageGroups.isEmpty && !hasFoundData) {
       ageGroups = getDefaultAgeGroups();
+      debugPrint('📋 使用默認年齡組別: $ageGroups');
     }
 
     return ageGroups;

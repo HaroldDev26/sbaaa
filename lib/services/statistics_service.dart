@@ -2,12 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/event_result.dart';
 import '../models/team_score.dart' as team_score;
-import 'analytics_service.dart';
+import '../utils/sorting_function.dart' as custom_sort;
 
 /// 用於統計分析的服務，將UI與數據分析層連接
 class StatisticsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final AnalyticsService _analyticsService = AnalyticsService();
 
   /// 獲取比賽所有項目
   Future<List<String>> getCompetitionEvents(String competitionId) async {
@@ -141,8 +140,17 @@ class StatisticsService {
               }
             });
 
-            // 根據成績排序並設置排名
-            results.sort((a, b) => b.score!.compareTo(a.score!));
+            // 根據成績排序並設置排名 - 使用自定義排序函數
+            results = custom_sort.quickSort(results, (a, b) {
+              // 田賽是較大的成績更好，所以降序排列（大的在前）
+              double aScore = a.score ?? 0.0;
+              double bScore = b.score ?? 0.0;
+
+              if (aScore > bScore) return -1;
+              if (aScore < bScore) return 1;
+              return 0; // 相等
+            });
+
             for (var i = 0; i < results.length; i++) {
               results[i] = results[i].copyWith(rank: i + 1);
             }
@@ -178,13 +186,29 @@ class StatisticsService {
       bool hasRanking = results.any((result) => result.rank != null);
       if (!hasRanking) {
         if (results.isNotEmpty && results.first.time != null) {
-          // 徑賽排序（時間升序）
-          results.sort((a, b) => a.time!.compareTo(b.time!));
-          debugPrint('按時間排序（徑賽）');
+          // 徑賽排序（時間升序 - 小的在前）- 使用自定義排序函數
+          results = custom_sort.bubbleSort(results, (a, b) {
+            // 使用傳統的比較方法
+            int aTime = a.time ?? 0;
+            int bTime = b.time ?? 0;
+
+            if (aTime < bTime) return -1;
+            if (aTime > bTime) return 1;
+            return 0; // 相等
+          });
+          debugPrint('按時間排序（徑賽）- 使用bubbleSort');
         } else if (results.isNotEmpty && results.first.score != null) {
-          // 田賽排序（成績降序）
-          results.sort((a, b) => b.score!.compareTo(a.score!));
-          debugPrint('按成績排序（田賽）');
+          // 田賽排序（成績降序 - 大的在前）- 使用自定義排序函數
+          results = custom_sort.insertionSort(results, (a, b) {
+            // 使用傳統的比較方法
+            double aScore = a.score ?? 0.0;
+            double bScore = b.score ?? 0.0;
+
+            if (aScore > bScore) return -1;
+            if (aScore < bScore) return 1;
+            return 0; // 相等
+          });
+          debugPrint('按成績排序（田賽）- 使用insertionSort');
         }
 
         // 設置排名
@@ -401,8 +425,35 @@ class StatisticsService {
         );
       }).toList();
 
-      // 按總分排序
-      teamScores.sort((a, b) => b.totalPoints.compareTo(a.totalPoints));
+      // 創建用於排序的數據列表
+      // 注意：雖然我們收集了金銀銅牌數量，但排序只依據總分進行
+      List<Map<String, dynamic>> teamScoresList = teamScores
+          .map((score) => {
+                'school': score.school,
+                'goldMedals': score.medalCounts['gold'] ?? 0,
+                'silverMedals': score.medalCounts['silver'] ?? 0,
+                'bronzeMedals': score.medalCounts['bronze'] ?? 0,
+                'totalScore': score.totalPoints,
+              })
+          .toList();
+
+      // 使用團隊積分排序函數（只按totalScore排序，默認降序）
+      teamScoresList = custom_sort.sortByTeamScore(teamScoresList);
+
+      // 將排序後的結果轉回TeamScore對象
+      // 這裡保留了獎牌信息，但這些信息只用於顯示，不影響排序
+      teamScores = teamScoresList
+          .map((data) => team_score.TeamScore(
+                school: data['school'] as String,
+                medalCounts: {
+                  'gold': data['goldMedals'] as int,
+                  'silver': data['silverMedals'] as int,
+                  'bronze': data['bronzeMedals'] as int,
+                },
+                pointsByEvent: {}, // 創建新的空Map
+                totalPoints: data['totalScore'] as int,
+              ))
+          .toList();
 
       return teamScores;
     } catch (e) {

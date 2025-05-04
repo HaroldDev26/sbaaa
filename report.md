@@ -2654,55 +2654,566 @@ try {
 }
 ```
 
-## 已實現的解決方案
+## 結論
 
-為了徹底解決 SQLite 數據儲存問題，我們實現了一個專門的測試工具：
+SQLite 存儲功能在應用中確實已實現，但存在數據未正確持久化的問題。通過實施上述建議，應用將能夠實現真正的雙重數據儲存，確保即使在離線狀態下也能保存和訪問競賽數據。建議在下一次開發迭代中優先處理這個問題，以提升應用的離線功能和可靠性。
 
-### SQLite 測試工具
+## DropdownButton 錯誤修復
 
-我們已經創建了一套 SQLite 測試工具，包括：
+在應用程序運行中遇到以下錯誤:
 
-1. **SQLiteTest 類**：提供了三種不同方式測試 SQLite 儲存功能：
-   - 直接使用 SQLite API 插入數據
-   - 通過 CompetitionManager 插入數據
-   - 通過 DatabaseHelper 插入數據
+```
+Exception has occurred: _AssertionError
+('package:flutter/src/material/dropdown.dart': Failed assertion: line 1001 pos 10: 'items == null ||
+             items.isEmpty ||
+             value == null ||
+             items.where((DropdownMenuItem<T> item) {
+                   return item.value == value;
+                 }).length ==
+                 1': There should be exactly one item with [DropdownButton]'s value: 未分類. 
+Either zero or 2 or more [DropdownMenuItem]s were detected with the same value)
+```
 
-2. **SQLiteTestScreen 頁面**：用戶友好的界面，允許：
-   - 查看當前數據庫狀態
-   - 運行三種不同的測試
-   - 檢視詳細的測試結果
+### 問題分析
 
-3. **主頁集成**：添加了從主頁直接訪問測試工具的按鈕
+1. **數據一致性問題**：
+   - 在創建和編輯比賽時，項目默認的 `eventType` 值設為 `未分類`
+   - 但項目類型的下拉選單中並沒有包含 `未分類` 選項，只有 `徑賽`, `田賽`, `接力`
+   - 這導致 DropdownButton 嘗試顯示不存在於選項中的值，引發斷言錯誤
 
-這個工具使開發者能夠：
-- 驗證 SQLite 數據庫是否正確設置
-- 確認數據是否真正寫入數據庫
-- 比較不同方法的效果
-- 診斷數據持久化問題
+2. **影響範圍**：
+   - `create_competition_screen.dart` 中創建比賽時設置的默認項目類型
+   - `result_record.dart` 中讀取和篩選項目的代碼
 
-### 使用方法
+### 實施的修復
 
-1. 在應用主頁點擊"測試SQLite"按鈕
-2. 在測試頁面點擊各個測試按鈕
-3. 查看測試結果，包括：
-   - 插入是否成功
-   - 數據庫路徑
-   - 記錄數量
-   - 插入的具體數據
-   - 可能的錯誤信息
+1. **統一項目類型值**：
+   - 將所有默認的 `eventType` 從 `未分類` 修改為 `徑賽`
+   - 這確保下拉選單中始終能找到對應的選項
+
+2. **具體修改**：
+   ```dart
+   // 創建比賽時
+   'events': _events.map((e) => {
+     'name': e,
+     'status': '比賽',
+     'description': '',
+     'eventType': '徑賽' // 原為'未分類'
+   }).toList(),
+   ```
+
+   ```dart
+   // 讀取項目時
+   final eventType = _eventTypeMap[eventName] ?? '徑賽'; // 原為'未分類'
+   ```
+
+   ```dart
+   // 篩選項目時
+   _matchedEvents = _events.where((event) =>
+       event['type'] == selectedType || event['type'] == '徑賽' // 原為'未分類'
+   ).toList();
+   ```
+
+3. **確保向後兼容**：
+   - 代碼仍然能夠正確處理舊數據，但會將默認值統一調整為 `徑賽`
+   - 這樣可以避免在界面上出現無法選擇的選項
+
+### 結果
+
+修復後，應用可以正常創建和編輯比賽，不再因為找不到 `未分類` 選項而出現錯誤。用戶體驗更加順暢，減少了不必要的崩潰和困惑。## 刪除 '未分類' 相關代碼
+由於在修復 DropdownButton 錯誤後，用戶表示不需要相關的功能，我們進行了進一步的代碼清理：
+
+### 問題背景
+
+修復 DropdownButton 錯誤後，result_record.dart 中仍然存在與 '未分類' 相關的程式碼片段，這些代碼可能會導致混淆並和當前系統的項目類型設計不一致。
+
+### 實施的修改
+
+1. **刪除所有 '未分類' 的視覺樣式邏輯**：
+   - 移除 Card 渲染中對 '未分類' 的特殊樣式設置
+   - 刪除 CircleAvatar 和 Icon 顏色設置中的 '未分類' 相關分支
+   - 簡化類型文本顯示，不再對 '未分類' 進行特殊處理
+
+2. **簡化項目篩選邏輯**：
+   - 修改 _filterEventsByType 方法，僅精確匹配目標項目類型
+   - 移除原本針對 '未分類' 的額外條件判斷，使過濾更加精確
+   - 結果是用戶只會看到與所選標籤完全匹配的項目
 
 ### 預期結果
 
-通過這個工具，我們可以確認：
-- SQLite 數據庫是否能正常工作
-- 是否存在路徑或訪問權限問題
-- 是否存在表結構不匹配問題
-- 哪種插入方法最可靠
+這些修改讓用戶界面更加簡潔、邏輯更加清晰，確保比賽項目始終以指定的類型（徑賽、田賽、接力）進行分類和顯示，避免了混淆。系統將不再提及或嘗試處理 '未分類' 狀態，完全依賴設定的標準項目類型。
 
-這個測試工具已成功提交到代碼庫，可供所有開發人員使用。
+## 報名管理頁面優化報告
 
-## 結論
+我們對報名管理頁面（`registrations_list_screen.dart`）進行了一系列優化，以提升用戶體驗和美觀度。主要修改內容如下：
 
-SQLite 存儲功能在應用中確實已實現，但存在數據未正確持久化的問題。通過我們開發的 SQLite 測試工具，可以系統性地診斷和解決這個問題。結合上述建議的代碼修改，應用將能夠實現真正的雙重數據儲存，確保即使在離線狀態下也能保存和訪問競賽數據。
+### 1. 參賽人數上限顯示改進
 
-建議在下一次開發迭代中使用這個測試工具驗證 SQLite 功能，並優先處理數據持久化問題，以提升應用的離線功能和可靠性。
+**修改前**：
+- 每個項目都顯示報名人數和人數上限
+- 佔用較多空間
+- 標題為「參賽人數上限」
+
+**修改後**：
+- 總參賽人數上限僅顯示在標題旁邊
+- 各個項目只顯示已報名人數，不顯示人數上限
+- 添加了明確的展開/收起提示，使用户知道可以點擊查看詳情
+- 將標題從「參賽人數上限」改為「查看報名人數」
+
+**技術實現**：
+```dart
+// 標題行改進
+Row(
+  children: [
+    const Text(
+      '查看報名人數', // 更改標題
+      style: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+    const SizedBox(width: 8),
+    // 只在標題旁顯示總參賽人數上限
+    if (!_isLoadingEventLimits && _eventLimits.isNotEmpty)
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.shade200),
+        ),
+        child: Text(
+          '總上限：${_calculateTotalLimit()}人',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.blue.shade800,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    const Spacer(),
+    // 明確的展開/收起提示
+    Row(
+      children: [
+        Text(
+          _isEventListExpanded ? '收起' : '展開',
+          style: TextStyle(
+            color: Colors.blue.shade700,
+            fontSize: 14,
+          ),
+        ),
+        Icon(
+          _isEventListExpanded
+            ? Icons.keyboard_arrow_up
+            : Icons.keyboard_arrow_down,
+          color: Colors.blue.shade700,
+        ),
+      ],
+    ),
+  ],
+),
+```
+
+### 2. UI元素佈局調整
+
+**修改前**：
+- 「全選所有運動員」按鈕文字過長
+- 批量操作按鈕位置不明確
+
+**修改後**：
+- 簡化全選按鈕的文字，改為「全選」
+- 將批量核准按鈕與選擇模式切換按鈕放在一行
+- 提升了界面的整潔性和直觀性
+
+### 3. 項目列表顯示優化
+
+**修改前**：
+- 使用Column顯示所有項目，缺少視覺分隔
+- 項目顯示缺乏結構感
+
+**修改後**：
+- 使用ListView.separated替代Column
+- 為各項目之間添加了清晰的分隔線
+- 使用ListTile替換自定義佈局，提供了一致的視覺效果
+
+**技術實現**：
+```dart
+return ListView.separated(
+  shrinkWrap: true,
+  physics: const NeverScrollableScrollPhysics(),
+  itemCount: _eventLimits.length,
+  separatorBuilder: (context, index) => const Divider(height: 1),
+  itemBuilder: (context, index) {
+    final event = _eventLimits[index];
+    return ListTile(
+      dense: true,
+      title: Text(
+        event["name"],
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: Text(
+        "${event["registered"]} 人已報名",
+        style: TextStyle(
+          fontSize: 14,
+          color: Colors.grey.shade800,
+        ),
+      ),
+      onTap: () => _showEventRegistrations(event["name"]),
+    );
+  },
+);
+```
+
+### 4. 報名卡片改進
+
+**修改前**：
+- 報名卡片使用自定義佈局，佔用較多空間
+- 操作按鈕在底部，需要較多點擊區域
+- 顯示「可點擊查看」提示文字
+
+**修改後**：
+- 使用ListTile組件，提供更緊湊的佈局
+- 調整卡片外觀，減小間距和邊距
+- 將操作按鈕移到右側，更符合標準設計模式
+- 移除多餘的提示文字，界面更簡潔
+
+**技術實現**：
+```dart
+ListTile(
+  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  leading: _selectAllMode 
+      ? Icon(
+          isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+          color: isSelected ? Colors.blue : Colors.grey,
+        )
+      : const Icon(Icons.person, color: Colors.blue),
+  title: Row(
+    children: [
+      Expanded(
+        child: Text(
+          registration['userName'],
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      // 狀態指示器
+    ],
+  ),
+  subtitle: Column(/* 子標題內容 */),
+  trailing: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      IconButton(
+        icon: const Icon(Icons.check_circle, color: Colors.green, size: 20),
+        onPressed: () => _updateStatus(registration, 'approved'),
+        tooltip: '核准',
+      ),
+      IconButton(
+        icon: const Icon(Icons.visibility, size: 20),
+        onPressed: () => _viewRegistrationDetails(registration),
+        tooltip: '查看詳情',
+      ),
+    ],
+  ),
+),
+```
+
+### 5. 展開/收起功能改進
+
+**修改前**：
+- 展開後不會自動重新載入資料
+- 展開/收起提示不明確
+
+**修改後**：
+- 展開時自動重新載入資料，確保顯示最新狀態
+- 添加明確的「展開/收起」文字提示
+- 點擊整個卡片區域即可展開/收起列表
+
+**技術實現**：
+```dart
+onTap: () {
+  setState(() {
+    _isEventListExpanded = !_isEventListExpanded;
+  });
+  // 重新載入數據
+  if (_isEventListExpanded && !_isLoadingEventLimits) {
+    _loadEventLimits();
+  }
+},
+```
+
+### 總結
+
+這些優化使報名管理頁面更加美觀、直觀、高效。特別是：
+
+1. 通過簡化項目人數顯示，提高了信息密度和清晰度
+2. 使用標準 Flutter 元件（如ListTile、ListView.separated）使界面更符合設計規範
+3. 優化了卡片佈局，提供更清晰的視覺階層和更好的操作體驗
+4. 展開/收起功能更加直觀，用户可以快速查看項目報名情況
+
+這些改進不僅提升了用户體驗，也使代碼更整潔、更易於維護。以後可以繼續優化的方向包括：
+- 添加排序功能，讓用户能按不同條件排序報名列表
+- 添加批量拒絕功能，便於管理員處理不合規的報名
+- 優化大數據量下的性能表現，如實施分頁加載等
+```
+
+## 搜索函數優化報告
+
+經過仔細分析系統中的搜索需求，我們對搜索功能進行了全面重構，基於線性搜索算法設計了三個專用搜索函數。這種分離設計能更好地滿足不同數據類型的搜索需求，提高搜索效率和代碼可維護性。
+
+### 優化方案概述
+
+將原有的單一 `linearSearchMap` 函數拆分為三個專用搜索函數：
+
+1. **`searchCompetitions`**：專門用於搜索比賽數據
+2. **`searchAthletes`**：專門用於搜索運動員數據
+3. **`searchEvents`**：專門用於搜索比賽項目數據
+
+同時保留了原有的 `linearSearchMap` 函數作為兼容性支持，確保系統其他部分不受影響。
+
+### 每個搜索函數的優化特點
+
+#### 1. 比賽搜索函數 (`searchCompetitions`)
+
+- **強類型設計**：直接使用 `CompetitionModel` 類型，而非通用的 `Map<String, dynamic>`
+- **字段直接訪問**：通過類的屬性直接訪問數據，避免了字符串查找和空值檢查
+- **日期智能搜索**：連接起始和結束日期進行搜索，提高了日期相關查詢效率
+- **相關性排序**：按照字段重要性順序進行檢查（名稱 > 描述 > 場地 > 日期）
+
+#### 2. 運動員搜索函數 (`searchAthletes`)
+
+- **多維過濾**：支持多個過濾條件（如性別、年齡組別等）的同時應用
+- **字段別名處理**：考慮到不同模塊使用不同字段名稱的情況（如 `name`/`userName`）
+- **深度搜索**：能夠搜索嵌套數據結構中的內容，如 `formData` 中的各項資料
+- **項目匹配**：特別處理 `events` 列表字段，支持對運動員參與的項目進行搜索
+
+#### 3. 項目搜索函數 (`searchEvents`)
+
+- **類別過濾**：提供專門的類別過濾功能，適合項目分類需求
+- **字段別名處理**：處理 `category`/`type` 不同命名方式
+- **規則搜索**：能夠在項目描述和規則文本中進行關鍵詞搜索
+
+### 性能優化措施
+
+所有三個搜索函數都採用了以下共同的優化技術：
+
+1. **快速路徑**：在特殊情況下（空源數據、無過濾條件）直接返回結果
+2. **預計算條件**：提前計算和存儲搜索條件（如 `hasQueryFilter`），避免重複檢查
+3. **循環優化**：使用 `for` 循環替代 `while` 循環，採用 `continue` 語句避免深層嵌套
+4. **記憶體優化**：使用 `<Type>[]` 語法創建列表，避免不必要的預分配
+5. **懶惰評估**：按照可能性排序檢查條件，高匹配率的條件先檢查
+
+### 使用案例適配
+
+- **比賽搜索**：適用於主頁、比賽列表等需要過濾比賽的場景
+- **運動員搜索**：適用於報名管理、成績錄入等需要過濾運動員的場景
+- **項目搜索**：適用於項目管理、比賽設置等需要過濾項目的場景
+
+通過此次優化，系統的搜索功能更加靈活、高效，並且代碼結構更加清晰，為未來的功能擴展提供了良好的基礎。
+
+## 線性搜索函數優化總結
+
+根據前面提到的優化策略，我們已經對系統中的搜索函數進行了全面改進，實現了三個專用的線性搜索函數並且在系統中替換了部分原有的搜索實現。主要完成了以下優化：
+
+1. **類型化搜索**：每個搜索函數都針對特定數據類型進行了優化，確保搜索更加準確和高效
+   - `searchCompetitions`：專門用於搜索比賽數據
+   - `searchAthletes`：專門用於搜索運動員數據
+   - `searchEvents`：專門用於搜索比賽項目數據
+
+2. **代碼重構**：已經在以下文件中應用了新的搜索函數
+   - `lib/data/competition_data.dart`：使用新的比賽搜索函數
+   - `lib/screens/athlete_home_screen.dart`：使用優化的搜索函數過濾比賽
+   - `lib/screens/result/field_event_record_screen.dart`：使用優化的運動員搜索函數
+   - `lib/screens/result/track_event_timer_screen.dart`：使用優化的運動員搜索函數
+
+3. **性能提升**：
+   - 避免重複字符串處理和不必要的內存分配
+   - 優化條件檢查順序，首先檢查最可能匹配的條件
+   - 根據數據特性自定義每種類型的搜索邏輯
+
+4. **健壯性增強**：
+   - 增加輸入驗證和參數檢查
+   - 提供更明確的類型支持
+   - 改善錯誤處理和邊界情況
+
+這些改進確保了搜索功能不僅更高效，而且更加靈活，能夠適應系統中各種不同的搜索需求。根據實際使用情況，可以在未來繼續調整和優化這些函數。
+
+## 搜索函數優化進展報告
+
+基於線性搜索算法，我們已經成功實現了三個不同用途的搜索函數，用於不同的數據類型搜索：
+
+### 1. 已實現功能
+
+1. **linearSearchMap** - 基礎版優化搜索函數
+   - 優化流程邏輯，先檢查常用欄位
+   - 改進記憶體使用，避免不必要的字符串操作
+   - 支持通用 Map<String, dynamic> 數據結構
+
+2. **searchCompetitions** - 比賽專用搜索函數
+   - 直接使用 CompetitionModel 類型，提供更好的類型安全
+   - 比賽特定欄位優化搜索
+   - 根據欄位重要性排序檢查順序
+
+3. **searchAthletes** - 運動員專用搜索函數
+   - 多維過濾支持，可同時按多個條件過濾
+   - 處理運動員特定欄位，如編號、學校、性別等
+   - 深度搜索支持，如搜索表單數據內的內容
+
+4. **searchEvents** - 項目專用搜索函數
+   - 支持項目類型過濾，包括徑賽、田賽、接力賽等
+   - 性別條件特殊處理，支持男女混合類型
+   - 智能匹配機制，兼容不同的欄位命名方式
+
+### 2. 功能應用
+
+目前已經將這些搜索函數應用到系統的以下部分：
+
+1. **field_event_record_screen.dart** - 使用 searchAthletes 過濾運動員
+2. **track_event_timer_screen.dart** - 使用 searchAthletes 過濾運動員
+3. **data/competition_data.dart** - 使用 searchCompetitions 過濾比賽
+
+由於接口差異，部分組件（如 result_record.dart）暫時保留原始過濾方式，等待進一步調整和改進。
+
+### 3. 後續優化計劃
+
+1. 統一搜索接口，使所有搜索函數參數結構一致
+2. 調整 searchEvents 函數，使其可以更靈活地用於所有項目搜索場景
+3. 添加模糊搜索和拼音搜索支持，提高中文搜索體驗
+4. 實現搜索結果排序機制，基於相關度評分
+
+這些搜索函數的優化和實現將顯著提高應用的用戶體驗，尤其是在處理大量數據時的性能和準確性。
+
+## 2024年9月10日更新：搜索函數設計與使用指南
+
+在本次更新中，我們對系統的搜索功能進行了全面重構，基於線性搜索算法設計了四種不同用途的搜索函數，並在系統的不同部分進行了應用。以下是這些搜索函數的詳細介紹和使用指南。
+
+### 搜索函數設計思路
+
+本系統中實現了四種搜索函數：
+
+1. **linearSearchMap**：通用型搜索函數，支持任何鍵值對結構數據的搜索
+2. **searchCompetitions**：比賽專用搜索函數，針對CompetitionModel類型優化
+3. **searchAthletes**：運動員專用搜索函數，支持多維度過濾
+4. **searchEvents**：項目專用搜索函數，支持項目類型過濾
+
+這種分離設計的好處是：
+- 每個函數可針對特定數據類型進行優化
+- 減少不必要的字段檢查，提高搜索效率
+- 提供更清晰的接口，改善代碼可讀性和可維護性
+- 支持特定場景的專業功能需求
+
+### 各搜索函數的關鍵特點比較
+
+| 函數名稱 | 輸入數據類型 | 過濾方式 | 特殊功能 | 適用場景 |
+|---------|------------|---------|---------|---------|
+| linearSearchMap | List<Map<String, dynamic>> | 關鍵詞 + 單一過濾條件 | 支持多種字段的通用搜索 | 不明確數據結構的通用場景 |
+| searchCompetitions | List<CompetitionModel> | 關鍵詞 + 狀態過濾 | 日期智能搜索，字段直接訪問 | 比賽列表、已註冊比賽 |
+| searchAthletes | List<Map<String, dynamic>> | 關鍵詞 + 多維過濾 | 字段別名處理，深度嵌套搜索 | 運動員名單、報名管理 |
+| searchEvents | List<Map<String, dynamic>> | 關鍵詞 + 類別過濾 | 項目類型特殊處理 | 項目管理、成績記錄 |
+
+### 函數實現邏輯詳解
+
+#### 1. linearSearchMap - 通用型搜索
+
+```dart
+List<Map<String, dynamic>> linearSearchMap(
+    List<Map<String, dynamic>> source, String query, String filter) {
+  // 快速路徑：源為空或無過濾條件
+  if (source.isEmpty || (query.isEmpty && (filter.isEmpty || filter == '全部'))) {
+    return query.isEmpty && (filter.isEmpty || filter == '全部') 
+        ? List.from(source) 
+        : [];
+  }
+
+  // 準備搜索參數
+  final lowerQuery = query.toLowerCase();
+  final hasQueryFilter = query.isNotEmpty;
+  final hasStatusFilter = filter.isNotEmpty && filter != '全部';
+  final results = <Map<String, dynamic>>[];
+
+  // 優先檢查狀態條件
+  for (final item in source) {
+    if (hasStatusFilter && item['status'] != filter) continue;
+    
+    // 無關鍵詞時，只需匹配狀態
+    if (!hasQueryFilter) {
+      results.add(item);
+      continue;
+    }
+
+    // 按重要性順序檢查字段
+    if (_checkField(item, 'name', lowerQuery) ||
+        _checkField(item, 'description', lowerQuery) ||
+        _checkField(item, 'venue', lowerQuery) ||
+        _checkDateFields(item, lowerQuery) ||
+        _checkField(item, 'userName', lowerQuery) ||
+        _checkField(item, 'school', lowerQuery) ||
+        _checkField(item, 'athleteNumber', lowerQuery)) {
+      results.add(item);
+    }
+  }
+
+  return results;
+}
+```
+
+**核心邏輯**：
+- 通用性設計：可用於任何鍵值對數據結構
+- 優先檢查狀態過濾條件，快速排除不匹配項
+- 按重要性順序檢查常見字段，提高匹配效率
+- 關鍵詞匹配任一重要字段即添加到結果
+
+#### 2. searchCompetitions - 比賽專用搜索
+
+```dart
+List<CompetitionModel> searchCompetitions(
+    List<CompetitionModel> source, String query, String filter) {
+  // 快速路徑處理
+  if (source.isEmpty) return [];
+  if (query.isEmpty && (filter.isEmpty || filter == '全部')) {
+    return List.from(source);
+  }
+
+  final results = <CompetitionModel>[];
+  final lowerQuery = query.toLowerCase();
+  final hasQueryFilter = query.isNotEmpty;
+  final hasStatusFilter = filter.isNotEmpty && filter != '全部';
+
+  for (final competition in source) {
+    // 先檢查狀態條件
+    if (hasStatusFilter && competition.status != filter) continue;
+
+    // 沒有查詢條件時直接添加
+    if (!hasQueryFilter) {
+      results.add(competition);
+      continue;
+    }
+
+    // 按相關性順序檢查字段（直接訪問對象屬性，更高效）
+    final name = competition.name.toLowerCase();
+    final description = competition.description.toLowerCase();
+    final venue = competition.venue?.toLowerCase() ?? '';
+    final dates = '${competition.startDate} ${competition.endDate}'.toLowerCase();
+
+    if (name.contains(lowerQuery) ||
+        description.contains(lowerQuery) ||
+        venue.contains(lowerQuery) ||
+        dates.contains(lowerQuery)) {
+      results.add(competition);
+    }
+  }
+
+  return results;
+}
+```
+
+**核心邏輯**：
+- 強類型設計：直接使用CompetitionModel類型，不涉及字符串鍵查找
+- 直接屬性訪問：通過對象屬性直接訪問數據，避免Map查找和空值檢查
+- 日期智能搜索：將開始和結束日期合併檢查，提高日期相關搜索命中率

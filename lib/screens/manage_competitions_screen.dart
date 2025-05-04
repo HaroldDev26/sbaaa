@@ -51,7 +51,8 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
       final results = await _competitionData.getFilteredCompetitions(query, '');
 
       setState(() {
-        _filteredCompetitions = insertionSort(results);
+        // 使用優化的比賽名稱排序函數
+        _filteredCompetitions = sortCompetitionsByName(results);
         _isLoading = false;
       });
     } catch (e) {
@@ -79,7 +80,8 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
 
       setState(() {
         _competitions = _competitionData.competitions;
-        _filteredCompetitions = insertionSort(_competitions);
+        // a使用優化的比賽名稱排序函數
+        _filteredCompetitions = sortCompetitionsByName(_competitions);
         _isLoading = false;
       });
     } catch (e) {
@@ -221,9 +223,6 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
       case 1: // 創建比賽
         _createCompetition();
         break;
-      case 2: // 返回
-        Navigator.pop(context);
-        break;
     }
   }
 
@@ -306,25 +305,13 @@ class _ManageCompetitionsScreenState extends State<ManageCompetitionsScreen> {
             icon: Icon(Icons.add_circle_outline),
             label: '創建比賽',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.arrow_back),
-            label: '返回',
-          ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _createCompetition,
-        backgroundColor: primaryColor,
-        child: const Icon(Icons.add),
       ),
     );
   }
 
   // 構建比賽卡片
   Widget _buildCompetitionCard(CompetitionModel competition) {
-    // 使用默認顏色
-    Color statusColor = Colors.blue;
-
     // 獲取當前用戶ID
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
     // 檢查當前用戶是否為比賽創建者或有刪除權限

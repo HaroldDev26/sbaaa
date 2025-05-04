@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide FieldValue;
 import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue;
 import 'package:intl/intl.dart';
+import '../utils/age_group_handler.dart'; // 添加年齡分組處理工具的匯入
+import '../utils/searching_function.dart'; // 添加搜索函數導入
 
 class RegistrationsListScreen extends StatefulWidget {
   final String competitionId;
@@ -34,11 +36,12 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
 
   // 改為動態從Firebase載入的年齡分組對應表
   Map<String, Map<String, int>> _ageGroups = {};
-  bool _isLoadingAgeGroups = true;
 
   // 新增：用於追踪選中的運動員f
   Set<String> _selectedAthletes = {};
   bool _selectAllMode = false;
+
+  bool _isEventListExpanded = false;
 
   @override
   void initState() {
@@ -59,10 +62,6 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
 
   // 載入年齡分組設定
   Future<void> _loadAgeGroups() async {
-    setState(() {
-      _isLoadingAgeGroups = true;
-    });
-
     try {
       // 從比賽文檔中獲取年齡分組設定
       final competitionDoc = await _firestore
@@ -72,7 +71,6 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
 
       if (!competitionDoc.exists) {
         setState(() {
-          _isLoadingAgeGroups = false;
           _ageGroups = {}; // 不使用預設值，保持空集合
         });
         if (mounted) {
@@ -88,92 +86,41 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
 
       final competitionData = competitionDoc.data() as Map<String, dynamic>;
 
-      // 僅使用最新格式，從metadata中獲取年齡分組設定
-      if (competitionData.containsKey('metadata') &&
-          competitionData['metadata'] != null &&
-          competitionData['metadata']['ageGroups'] != null) {
-        final ageGroupsList =
-            competitionData['metadata']['ageGroups'] as List<dynamic>;
+      // 使用 AgeGroupHandler 統一處理年齡分組
+      List<Map<String, dynamic>> ageGroups =
+          AgeGroupHandler.loadAgeGroupsFromMetadata(
+              competitionData['metadata'] as Map<String, dynamic>?);
 
+      if (ageGroups.isNotEmpty) {
+        // 轉換為報名列表頁面需要的格式
         Map<String, Map<String, int>> parsedAgeGroups = {};
 
-        for (var group in ageGroupsList) {
-          // 處理新格式：對象包含name、minAge和maxAge
-          if (group is Map<String, dynamic>) {
-            final String groupName = group['name'] ?? '未命名';
-            final int? minAge = group['minAge'] as int?;
-            final int? maxAge = group['maxAge'] as int?;
+        for (var group in ageGroups) {
+          final String groupName = group['name'] ?? '未命名';
+          final int startAge = group['startAge'] ?? 0;
+          final int endAge = group['endAge'] ?? 0;
 
-            if (minAge != null && maxAge != null) {
-              parsedAgeGroups[groupName] = {
-                'min': minAge,
-                'max': maxAge,
-              };
-            }
-          }
-          // 向後兼容：處理原有的字符串格式
-          else if (group is String) {
-            // 處理格式: "名稱: 起始年齡-結束年齡歲"
-            if (group.contains(':')) {
-              final parts = group.split(':');
-              final groupName = parts[0].trim(); // 分組名稱
-              final agePart = parts[1].trim();
-
-              // 提取年齡範圍數字
-              final ageRange = agePart.replaceAll('歲', '').split('-');
-              if (ageRange.length == 2) {
-                try {
-                  final minAge =
-                      int.parse(ageRange[0].replaceAll(RegExp(r'[^0-9]'), ''));
-                  final maxAge =
-                      int.parse(ageRange[1].replaceAll(RegExp(r'[^0-9]'), ''));
-
-                  parsedAgeGroups[groupName] = {
-                    'min': minAge,
-                    'max': maxAge,
-                  };
-                } catch (e) {
-                  // 解析失敗時繼續下一個
-                  continue;
-                }
-              }
-            }
-          }
+          parsedAgeGroups[groupName] = {
+            'min': startAge,
+            'max': endAge,
+          };
         }
 
         setState(() {
           _ageGroups = parsedAgeGroups;
-          _isLoadingAgeGroups = false;
         });
-        return;
-      }
-
-      // 如果沒有找到有效的年齡分組設定，使用空集合
-      setState(() {
-        _ageGroups = {};
-        _isLoadingAgeGroups = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('比賽未設定有效的年齡分組'),
-            backgroundColor: Colors.orange,
-          ),
-        );
+      } else {
+        // 如果沒有找到有效的年齡分組設定，使用空集合
+        setState(() {
+          _ageGroups = {};
+        });
       }
     } catch (e) {
+      debugPrint('載入年齡分組設定失敗: $e');
+      // 發生錯誤時，設置為空集合
       setState(() {
-        _isLoadingAgeGroups = false;
-        _ageGroups = {}; // 出錯時使用空集合
+        _ageGroups = {};
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('載入年齡分組設定出錯: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 
@@ -547,9 +494,8 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
     }
   }
 
-  // 過濾報名者列表
   void _filterRegistrations() {
-    final query = _searchController.text.toLowerCase().trim();
+    final query = _searchController.text.toLowerCase();
 
     setState(() {
       if (query.isEmpty && _selectedFilter == '全部') {
@@ -557,100 +503,24 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
         return;
       }
 
-      _filteredRegistrations = _registrations.where((registration) {
-        bool matchesQuery = true;
-        final formData = registration['formData'] as Map<String, dynamic>;
-        final events = registration['events'] as List<dynamic>;
-        final status = registration['status'] as String;
-        final ageGroup = registration['ageGroup'] as String?;
+      Map<String, String> filters = {};
+      if (_selectedFilter != '全部' && _ageGroups.containsKey(_selectedFilter)) {
+        filters['ageGroup'] = _selectedFilter;
+      }
 
-        if (query.isNotEmpty) {
-          // 搜尋用戶名、電子郵箱、學校、班級
-          bool nameMatches =
-              registration['userName'].toString().toLowerCase().contains(query);
-          bool emailMatches = registration['userEmail']
-              .toString()
-              .toLowerCase()
-              .contains(query);
-          bool schoolMatches = registration['userSchool']
-              .toString()
-              .toLowerCase()
-              .contains(query);
-          bool classMatches = registration['userClass']
-              .toString()
-              .toLowerCase()
-              .contains(query);
-          bool eventsMatch = events
-              .any((event) => event.toString().toLowerCase().contains(query));
-
-          // 搜尋報名表格中的所有欄位
-          bool dataMatches = false;
-          for (var field in formData.entries) {
-            if (field.value.toString().toLowerCase().contains(query)) {
-              dataMatches = true;
-              break;
-            }
-          }
-
-          matchesQuery = nameMatches ||
-              emailMatches ||
-              dataMatches ||
-              schoolMatches ||
-              classMatches ||
-              eventsMatch;
-        }
-
-        // 根據過濾器過濾
-        if (_selectedFilter != '全部') {
-          // 檢查是否是按年齡分組過濾
-          if (_ageGroups.containsKey(_selectedFilter)) {
-            // 直接匹配年齡分組名稱
-            return matchesQuery && ageGroup == _selectedFilter;
-          }
-          // 其他過濾選項
-          else if (_selectedFilter == '最新報名' &&
-              registration['submittedAt'] != null) {
-            final submittedTime =
-                (registration['submittedAt'] as Timestamp).toDate();
-            final oneWeekAgo = DateTime.now().subtract(const Duration(days: 7));
-            return matchesQuery && submittedTime.isAfter(oneWeekAgo);
-          } else if (_selectedFilter == '待審核' && status == 'pending') {
-            return matchesQuery;
-          } else if (_selectedFilter == '已核准' && status == 'approved') {
-            return matchesQuery;
-          } else if (_selectedFilter == '已拒絕' && status == 'rejected') {
-            return matchesQuery;
-          } else if (_selectedFilter == '年齡不符' && !_isLoadingAgeGroups) {
-            // 移除年齡不符的過濾選項
-            return false;
-          } else {
-            return false;
-          }
-        }
-
-        return matchesQuery;
-      }).toList();
+      _filteredRegistrations = searchAthletes(
+        _registrations,
+        query,
+        filters,
+      );
     });
   }
 
-  // 匯出報名資料(CSV格式)
-  void _exportRegistrations() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('匯出功能即將推出'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  // 查看報名詳情
   void _viewRegistrationDetails(Map<String, dynamic> registration) {
-    // 獲取出生日期和比賽組別
     final formData = registration['formData'] as Map<String, dynamic>;
     final String? birthDate = formData['birthDate'] as String?;
     final String? ageGroup = registration['ageGroup'] as String?;
 
-    // 顯示詳情對話框
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -1105,11 +975,12 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
     final bool isSelected = _selectedAthletes.contains(registrationId);
 
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+      elevation: 1,
       // 在選擇模式下，卡片可能會有不同的外觀
       shape: _selectAllMode
           ? RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               side: BorderSide(
                 color: isSelected ? Colors.blue : Colors.grey.shade300,
                 width: isSelected ? 2.0 : 1.0,
@@ -1132,36 +1003,34 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
             _viewRegistrationDetails(registration);
           }
         },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        child: Column(
+          children: [
+            ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              leading: _selectAllMode
+                  ? Icon(
+                      isSelected
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      color: isSelected ? Colors.blue : Colors.grey,
+                    )
+                  : const Icon(Icons.person, color: Colors.blue),
+              title: Row(
                 children: [
-                  // 在選擇模式下顯示複選框
-                  if (_selectAllMode)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: Icon(
-                        isSelected
-                            ? Icons.check_box
-                            : Icons.check_box_outline_blank,
-                        color: isSelected ? Colors.blue : Colors.grey,
-                      ),
-                    ),
                   Expanded(
                     child: Text(
                       registration['userName'],
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: _getStatusColor(status).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(16),
@@ -1175,73 +1044,86 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-
-              // 學校與班級
-              Row(
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.school, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '${registration['userSchool']} ${registration['userClass']}',
-                      style: TextStyle(color: Colors.grey[600]),
-                      overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.school, size: 14, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '${registration['userSchool']} ${registration['userClass']}',
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (registration['ageGroup'].toString().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        children: [
+                          Icon(Icons.people, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${registration['ageGroup']} 組',
+                            style: TextStyle(
+                                color: Colors.grey[600], fontSize: 12),
+                          ),
+                        ],
+                      ),
                     ),
+                  if (submittedAt != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        children: [
+                          Icon(Icons.access_time,
+                              size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            DateFormat('yyyy-MM-dd HH:mm')
+                                .format(submittedAt.toDate()),
+                            style: TextStyle(
+                                color: Colors.grey[600], fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.check_circle,
+                        color: Colors.green, size: 20),
+                    onPressed: () => _updateStatus(registration, 'approved'),
+                    tooltip: '核准',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.visibility, size: 20),
+                    onPressed: () => _viewRegistrationDetails(registration),
+                    tooltip: '查看詳情',
                   ),
                 ],
               ),
-
-              // 年齡組別（不顯示檢查指示器）
-              if (registration['ageGroup'].toString().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.people, size: 16, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${registration['ageGroup']} 組',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // 提交時間
-              if (submittedAt != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.access_time,
-                          size: 16, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Text(
-                        DateFormat('yyyy-MM-dd HH:mm')
-                            .format(submittedAt.toDate()),
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-
-              const Divider(),
-
-              // 報名項目
-              if (events.isNotEmpty)
-                Column(
+            ),
+            if (events.isNotEmpty && !_selectAllMode)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '報名項目:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
+                    const Divider(height: 1),
+                    const SizedBox(height: 8),
                     Wrap(
-                      spacing: 8,
+                      spacing: 6,
+                      runSpacing: 4,
                       children: events
                           .map((event) => Chip(
                                 label: Text(event.toString()),
@@ -1250,33 +1132,16 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
                                 labelStyle: const TextStyle(fontSize: 12),
                                 backgroundColor:
                                     Colors.blue.withValues(alpha: 0.1),
+                                padding: EdgeInsets.zero,
+                                labelPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 0),
                               ))
                           .toList(),
                     ),
                   ],
                 ),
-
-              // 操作按鈕
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton.icon(
-                    onPressed: () => _viewRegistrationDetails(registration),
-                    icon: const Icon(Icons.visibility, size: 18),
-                    label: const Text('查看詳情'),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: () => _updateStatus(registration, 'approved'),
-                    icon: const Icon(Icons.check_circle,
-                        size: 18, color: Colors.green),
-                    label:
-                        const Text('核准', style: TextStyle(color: Colors.green)),
-                  ),
-                ],
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -1288,30 +1153,6 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
       appBar: AppBar(
         title: Text('已報名運動員: ${widget.competitionName}'),
         actions: [
-          // 新增全選模式切換按鈕
-          IconButton(
-            icon: Icon(_selectAllMode ? Icons.select_all : Icons.checklist),
-            onPressed: () {
-              setState(() {
-                _selectAllMode = !_selectAllMode;
-                // 切換模式時清空選擇
-                _selectedAthletes.clear();
-              });
-            },
-            tooltip: _selectAllMode ? '退出選擇模式' : '進入選擇模式',
-          ),
-          // 批量核准按鈕 - 僅在選擇模式下顯示，且有選中項目時
-          if (_selectAllMode && _selectedAthletes.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.check_circle),
-              onPressed: _batchApproveAthletes,
-              tooltip: '批量核准所選運動員',
-            ),
-          IconButton(
-            icon: const Icon(Icons.file_download),
-            onPressed: _exportRegistrations,
-            tooltip: '匯出報名資料',
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadRegistrations,
@@ -1323,45 +1164,87 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
           // 顯示各項目參賽人數上限卡片
           Card(
             margin: const EdgeInsets.all(16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        '參賽人數上限',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _isEventListExpanded = !_isEventListExpanded;
+                });
+                // 重新載入數據
+                if (_isEventListExpanded && !_isLoadingEventLimits) {
+                  _loadEventLimits();
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 標題行
+                    Row(
+                      children: [
+                        const Text(
+                          '查看報名人數',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.refresh, size: 20),
-                        tooltip: '刷新項目數據',
-                        onPressed: () {
-                          _loadEventLimits();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('正在刷新項目數據...')),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  if (!_isLoadingEventLimits && _eventLimits.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: Text(
-                        '最後更新：${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
+                        const SizedBox(width: 8),
+                        // 只在標題旁顯示總參賽人數上限
+                        if (!_isLoadingEventLimits && _eventLimits.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Text(
+                              '總上限：${_calculateTotalLimit()}人',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.blue.shade800,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        const Spacer(),
+                        // 更明確的展開/收起提示
+                        Row(
+                          children: [
+                            Text(
+                              _isEventListExpanded ? '收起' : '展開',
+                              style: TextStyle(
+                                color: Colors.blue.shade700,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Icon(
+                              _isEventListExpanded
+                                  ? Icons.keyboard_arrow_up
+                                  : Icons.keyboard_arrow_down,
+                              color: Colors.blue.shade700,
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  const SizedBox(height: 8),
-                  // 項目和人數限制列表
-                  _buildEventLimitsList(),
-                ],
+                    // 項目列表 - 僅在展開狀態顯示
+                    if (_isEventListExpanded)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16.0),
+                        child: _isLoadingEventLimits
+                            ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              )
+                            : _buildEventLimitsList(),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1384,6 +1267,101 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+
+                // 添加選擇模式切換按鈕和批量核准按鈕
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    ElevatedButton.icon(
+                      icon:
+                          Icon(_selectAllMode ? Icons.cancel : Icons.checklist),
+                      label: Text(_selectAllMode ? '取消' : '選擇'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _selectAllMode
+                            ? Colors.red.shade100
+                            : Colors.blue.shade100,
+                        foregroundColor: _selectAllMode
+                            ? Colors.red.shade700
+                            : Colors.blue.shade700,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _selectAllMode = !_selectAllMode;
+                          // 切換模式時清空選擇
+                          _selectedAthletes.clear();
+                        });
+                      },
+                    ),
+
+                    // 批量核准按鈕 - 僅在選擇模式下顯示，且有選中項目時
+                    if (_selectAllMode && _selectedAthletes.isNotEmpty)
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.check_circle),
+                        label: Text('批量核准(${_selectedAthletes.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: _batchApproveAthletes,
+                      ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // 選擇模式下顯示全選按鈕
+                if (_selectAllMode)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        ElevatedButton.icon(
+                          icon: Icon(
+                            _selectedAthletes.length ==
+                                    _filteredRegistrations.length
+                                ? Icons.check_box
+                                : Icons.check_box_outline_blank,
+                          ),
+                          label: Text(
+                            _selectedAthletes.length ==
+                                    _filteredRegistrations.length
+                                ? '取消全選'
+                                : '全選',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _selectedAthletes.length ==
+                                    _filteredRegistrations.length
+                                ? Colors.blue
+                                : Colors.grey.shade200,
+                            foregroundColor: _selectedAthletes.length ==
+                                    _filteredRegistrations.length
+                                ? Colors.white
+                                : Colors.black,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              if (_selectedAthletes.length ==
+                                  _filteredRegistrations.length) {
+                                // 如果已經全選，則取消全選
+                                _selectedAthletes.clear();
+                              } else {
+                                // 否則選擇所有項目
+                                _selectedAthletes = _filteredRegistrations
+                                    .map((reg) => reg['id'] as String)
+                                    .toSet();
+                              }
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '已選擇: ${_selectedAthletes.length}/${_filteredRegistrations.length}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 _buildFilterChips(),
               ],
             ),
@@ -1414,7 +1392,7 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
                           ],
                         ),
                       )
-                    : ListView.builder(
+                    : ListView.separated(
                         padding: const EdgeInsets.only(bottom: 16),
                         controller: _scrollController,
                         itemCount: _filteredRegistrations.length,
@@ -1422,19 +1400,15 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
                           final registration = _filteredRegistrations[index];
                           return _buildRegistrationCard(registration);
                         },
+                        separatorBuilder: (context, index) => const Divider(
+                          height: 1,
+                          indent: 16,
+                          endIndent: 16,
+                        ),
                       ),
           ),
         ],
       ),
-      // 添加浮動操作按鈕 - 僅在選擇模式下顯示，且有選中項目時
-      floatingActionButton: _selectAllMode && _selectedAthletes.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: _batchApproveAthletes,
-              icon: const Icon(Icons.check_circle),
-              label: Text('批量核准(${_selectedAthletes.length})'),
-              backgroundColor: Colors.green,
-            )
-          : null,
     );
   }
 
@@ -1445,51 +1419,6 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 選擇模式下顯示全選按鈕
-          if (_selectAllMode)
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  icon: Icon(
-                      _selectedAthletes.length == _filteredRegistrations.length
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank),
-                  label: Text(
-                      _selectedAthletes.length == _filteredRegistrations.length
-                          ? '取消全選'
-                          : '全選所有運動員'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _selectedAthletes.length ==
-                            _filteredRegistrations.length
-                        ? Colors.blue
-                        : Colors.grey.shade200,
-                    foregroundColor: _selectedAthletes.length ==
-                            _filteredRegistrations.length
-                        ? Colors.white
-                        : Colors.black,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      if (_selectedAthletes.length ==
-                          _filteredRegistrations.length) {
-                        // 如果已經全選，則取消全選
-                        _selectedAthletes.clear();
-                      } else {
-                        // 否則選擇所有項目
-                        _selectedAthletes = _filteredRegistrations
-                            .map((reg) => reg['id'] as String)
-                            .toSet();
-                      }
-                    });
-                  },
-                ),
-                const SizedBox(width: 8),
-                Text(
-                    '已選擇: ${_selectedAthletes.length}/${_filteredRegistrations.length}',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
-          const SizedBox(height: 8),
           Wrap(
             spacing: 8.0,
             runSpacing: 4.0,
@@ -1526,57 +1455,6 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
                     },
                   );
                 }).toList(),
-              // 新增：最新報名
-              FilterChip(
-                label: const Text('最新報名'),
-                selected: _selectedFilter == '最新報名',
-                onSelected: (selected) {
-                  if (selected) {
-                    setState(() {
-                      _selectedFilter = '最新報名';
-                      _filterRegistrations();
-                    });
-                  }
-                },
-              ),
-              // 狀態篩選
-              FilterChip(
-                label: const Text('待審核'),
-                selected: _selectedFilter == '待審核',
-                onSelected: (selected) {
-                  if (selected) {
-                    setState(() {
-                      _selectedFilter = '待審核';
-                      _filterRegistrations();
-                    });
-                  }
-                },
-              ),
-              FilterChip(
-                label: const Text('已核准'),
-                selected: _selectedFilter == '已核准',
-                onSelected: (selected) {
-                  if (selected) {
-                    setState(() {
-                      _selectedFilter = '已核准';
-                      _filterRegistrations();
-                    });
-                  }
-                },
-              ),
-              FilterChip(
-                label: const Text('已拒絕'),
-                selected: _selectedFilter == '已拒絕',
-                onSelected: (selected) {
-                  if (selected) {
-                    setState(() {
-                      _selectedFilter = '已拒絕';
-                      _filterRegistrations();
-                    });
-                  }
-                },
-              ),
-              // 移除年齡不符的篩選選項
             ],
           ),
         ],
@@ -1612,117 +1490,32 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
       );
     }
 
-    return Column(
-      children: _eventLimits
-          .map((event) => InkWell(
-                onTap: () => _showEventRegistrations(event["name"]),
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              event["name"],
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            "${event["registered"]} / ${event["limit"]}",
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: (event["registered"] as int) >=
-                                      (event["limit"] as int) / 2
-                                  ? (event["registered"] as int) >=
-                                          (event["limit"] as int)
-                                      ? Colors.red
-                                      : Colors.orange
-                                  : Colors.black,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      // 添加進度條
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: (event["limit"] as int) > 0
-                              ? (event["registered"] as int) /
-                                  (event["limit"] as int)
-                              : 0,
-                          backgroundColor: Colors.grey.shade200,
-                          color: (event["registered"] as int) >=
-                                  (event["limit"] as int)
-                              ? Colors.red
-                              : (event["registered"] as int) >=
-                                      (event["limit"] as int) / 2
-                                  ? Colors.orange
-                                  : Colors.green,
-                          minHeight: 6,
-                        ),
-                      ),
-                      // 進度條說明
-                      if ((event["registered"] as int) >=
-                          (event["limit"] as int))
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            '已達上限',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.red.shade700,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        )
-                      else if ((event["registered"] as int) >=
-                          (event["limit"] as int) * 0.8)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            '接近上限',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.orange.shade800,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      // 提示可點擊查看詳情
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              size: 12,
-                              color: Colors.blue.shade700,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '點擊查看報名此項目的選手',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.blue.shade700,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ))
-          .toList(),
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _eventLimits.length,
+      separatorBuilder: (context, index) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final event = _eventLimits[index];
+        return ListTile(
+          dense: true,
+          title: Text(
+            event["name"],
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          trailing: Text(
+            "${event["registered"]} 人已報名",
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade800,
+            ),
+          ),
+          onTap: () => _showEventRegistrations(event["name"]),
+        );
+      },
     );
   }
 
@@ -2100,12 +1893,6 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
                             },
                           ),
                         ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('關閉'),
-                          ),
-                        ],
                       ),
                     );
                   },
@@ -2127,5 +1914,14 @@ class _RegistrationsListScreenState extends State<RegistrationsListScreen> {
         ),
       );
     }
+  }
+
+  // 計算總人數上限
+  int _calculateTotalLimit() {
+    int totalLimit = 0;
+    for (var event in _eventLimits) {
+      totalLimit += event["limit"] as int;
+    }
+    return totalLimit;
   }
 }

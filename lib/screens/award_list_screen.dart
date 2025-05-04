@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import '../utils/colors.dart';
-import 'package:flutter/foundation.dart'; // 添加這一行以使用 debugPrint
+import '../utils/searching_function.dart'; // 添加搜索函數導入
+import '../utils/sorting_function.dart'; // 添加排序函數的導入
 
 class AwardListScreen extends StatefulWidget {
   final String competitionId;
@@ -29,8 +30,10 @@ class _AwardListScreenState extends State<AwardListScreen>
   String _searchText = '';
   String _selectedType = '全部';
   final List<String> _eventTypes = ['全部', '徑賽', '田賽', '接力'];
-  String? _selectedSchool;
-  List<String> _schools = [];
+
+  // 學校排名相關
+  Map<String, int> _schoolTotalRanking = {}; // 總排名
+  bool _isLoadingSchoolRankings = false;
 
   // 檢查網絡連接
   Future<bool> _checkConnectivity() async {
@@ -62,8 +65,16 @@ class _AwardListScreenState extends State<AwardListScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loadAllResults(); // 當應用程序恢復時重新加載數據
+      _loadAllResults();
     }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      // 移除未定義的變數
+    });
   }
 
   // 載入所有比賽結果
@@ -97,33 +108,42 @@ class _AwardListScreenState extends State<AwardListScreen>
       final results = snapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
+
+        // 確保每個項目都有eventType，根據名稱識別接力賽
+        if (data['eventType'] == null) {
+          // 檢查項目名稱中是否包含"接力"關鍵詞
+          String eventName = data['eventName']?.toString().toLowerCase() ?? '';
+          if (eventName.contains('接力')) {
+            data['eventType'] = '接力';
+          } else if (eventName.contains('跳') ||
+              eventName.contains('擲') ||
+              eventName.contains('投')) {
+            data['eventType'] = '田賽';
+          } else {
+            data['eventType'] = '徑賽'; // 默認為徑賽
+          }
+        }
+
         return data;
       }).toList();
 
       // 按項目類型排序
-      results.sort((a, b) => (a['eventType'].toString() +
-              a['eventName'].toString())
-          .compareTo(b['eventType'].toString() + b['eventName'].toString()));
+      final sortedResults = sortByEventType(results);
 
-      // 提取所有學校
-      Set<String> schoolsSet = {};
-      for (var result in results) {
-        if (result['results'] is List) {
-          for (var athlete in result['results']) {
-            if (athlete['school'] != null &&
-                athlete['school'].toString().isNotEmpty) {
-              schoolsSet.add(athlete['school'].toString());
-            }
-          }
-        }
+      // 打印排序後的項目類型，用於調試
+      debugPrint('排序後項目類型:');
+      for (var result in sortedResults) {
+        debugPrint('項目: ${result['eventName']}, 類型: ${result['eventType']}');
       }
-      _schools = schoolsSet.toList()..sort();
 
       setState(() {
-        _allResults = results;
-        _filteredResults = results;
+        _allResults = sortedResults;
+        _filteredResults = sortedResults;
         _isLoading = false;
       });
+
+      // 加載學校排名
+      _calculateSchoolRankings(sortedResults);
     } catch (e) {
       if (!mounted) return;
 
@@ -145,41 +165,131 @@ class _AwardListScreenState extends State<AwardListScreen>
     }
   }
 
-  // 過濾結果
-  void _filterResults() {
-    if (_debounceTimer?.isActive ?? false) _debounceTimer?.cancel();
+  // 計算學校排名
+  Future<void> _calculateSchoolRankings(
+      List<Map<String, dynamic>> results) async {
+    if (!mounted) return;
 
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
+    setState(() {
+      _isLoadingSchoolRankings = true;
+    });
 
-      setState(() {
-        _filteredResults = _allResults.where((result) {
-          // 檢查項目名稱是否包含搜索文字
-          final nameMatch = (result['eventName'] ?? '')
-              .toString()
-              .toLowerCase()
-              .contains(_searchText.toLowerCase());
+    try {
+      // 計算總排名
+      Map<String, int> totalRanking = {};
 
-          // 檢查項目類型是否匹配選擇的類型
-          final typeMatch = _selectedType == '全部' ||
-              (result['eventType'] ?? '').toString() == _selectedType;
-
-          // 如果選擇了學校，檢查結果中是否包含該學校的運動員
-          bool schoolMatch = true;
-          if (_selectedSchool != null && _selectedSchool!.isNotEmpty) {
-            schoolMatch = false;
-            if (result['results'] is List) {
-              for (var athlete in result['results']) {
-                if (athlete['school'] == _selectedSchool) {
-                  schoolMatch = true;
-                  break;
-                }
-              }
-            }
+      for (var result in results) {
+        if (result['results'] is List &&
+            (result['results'] as List).isNotEmpty) {
+          // 判斷是否為接力項目
+          String eventName = result['eventName']?.toString() ?? '';
+          bool isRelay = false;
+          if (result['eventType'] == '接力' || eventName.contains('接力')) {
+            isRelay = true;
           }
 
-          return nameMatch && typeMatch && schoolMatch;
-        }).toList();
+          // 計算積分
+          for (var athlete in result['results']) {
+            if (athlete['rank'] == null ||
+                athlete['school'] == null ||
+                athlete['school'].toString().isEmpty) {
+              continue;
+            }
+
+            String school = athlete['school'].toString();
+            int rank = athlete['rank'];
+            int points = _calculatePointsForRank(rank, isRelay: isRelay);
+
+            // 更新總排名
+            totalRanking[school] = (totalRanking[school] ?? 0) + points;
+          }
+        }
+      }
+
+      setState(() {
+        _schoolTotalRanking = totalRanking;
+        _isLoadingSchoolRankings = false;
+      });
+    } catch (e) {
+      debugPrint('計算學校排名失敗: $e');
+      setState(() {
+        _isLoadingSchoolRankings = false;
+      });
+    }
+  }
+
+  // 根據名次計算積分
+  int _calculatePointsForRank(int rank, {bool isRelay = false}) {
+    // 排名計分規則
+    int baseScore = 0;
+    switch (rank) {
+      case 1:
+        baseScore = 11; // 第一名 11分
+        break;
+      case 2:
+        baseScore = 9; // 第二名 9分
+        break;
+      case 3:
+        baseScore = 7; // 第三名 7分
+        break;
+      case 4:
+        baseScore = 5; // 第四名 5分
+        break;
+      case 5:
+        baseScore = 4; // 第五名 4分
+        break;
+      case 6:
+        baseScore = 3; // 第六名 3分
+        break;
+      case 7:
+        baseScore = 2; // 第七名 2分
+        break;
+      case 8:
+        baseScore = 1; // 第八名 1分
+        break;
+      default:
+        baseScore = 0; // 其他名次不得分
+        break;
+    }
+
+    // 接力項目得分翻倍
+    return isRelay ? baseScore * 2 : baseScore;
+  }
+
+  // 過濾結果
+  void _filterResults() {
+    if (_debounceTimer?.isActive ?? false) {
+      _debounceTimer?.cancel();
+    }
+
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        // 構建過濾條件
+        Map<String, dynamic> filters = {};
+        if (_selectedType != '全部') {
+          filters['eventType'] = _selectedType; // 確保使用正確的字段名來過濾項目類型
+        }
+        // 移除學校過濾條件
+
+        debugPrint('選擇的類型: $_selectedType');
+        debugPrint('過濾前結果數量: ${_allResults.length}');
+
+        // 打印出所有項目類型以診斷
+        debugPrint('所有項目類型:');
+        for (var result in _allResults) {
+          debugPrint('項目: ${result['eventName']}, 類型: ${result['eventType']}');
+        }
+
+        // 使用專用的searchEvents函數進行過濾，啟用二分查找
+        _filteredResults = searchEvents(
+            _allResults, _searchText.toLowerCase(), filters,
+            isSorted: true, sortField: 'eventName');
+
+        debugPrint('過濾後結果數量: ${_filteredResults.length}');
       });
     });
   }
@@ -210,6 +320,123 @@ class _AwardListScreenState extends State<AwardListScreen>
     );
   }
 
+  // 導航到學校排名頁面
+  void _navigateToSchoolRanking() {
+    if (_isLoadingSchoolRankings) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在計算學校排名，請稍候...')),
+      );
+      return;
+    }
+
+    // 如果尚未計算完成排名，開始計算
+    if (_schoolTotalRanking.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在更新學校排名數據...')),
+      );
+      _calculateSchoolRankings(_allResults);
+      return;
+    }
+
+    // 直接顯示學校排名對話框
+    _showSchoolRankingDialog();
+  }
+
+  // 顯示學校排名對話框
+  void _showSchoolRankingDialog() {
+    // 將排名數據轉換為可排序的列表
+    final List<MapEntry<String, int>> sortedRankings =
+        _schoolTotalRanking.entries.toList();
+
+    // 按積分降序排序
+    sortedRankings.sort((a, b) => b.value.compareTo(a.value));
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${widget.competitionName} - 學校積分排名'),
+        content: Container(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: sortedRankings.length,
+            itemBuilder: (context, index) {
+              final entry = sortedRankings[index];
+              final school = entry.key;
+              final points = entry.value;
+
+              // 前三名使用不同顏色高亮顯示
+              Color? rankColor;
+              if (index == 0) {
+                rankColor = Colors.amber;
+              } else if (index == 1) {
+                rankColor = Colors.blueGrey;
+              } else if (index == 2) {
+                rankColor = Colors.brown;
+              }
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: rankColor?.withValues(alpha: 0.1) ??
+                            Colors.grey.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: rankColor ?? Colors.grey[700],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        school,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$points 分',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[700],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('關閉'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // 構建頂部卡片
   Widget _buildCard(
       BuildContext context, List<Map<String, dynamic>> filteredWithResults) {
@@ -223,12 +450,15 @@ class _AwardListScreenState extends State<AwardListScreen>
       if (result['results'] is List) {
         List results = result['results'] as List;
         for (var athlete in results) {
-          if (athlete['rank'] == 1)
+          if (athlete['rank'] == 1) {
             medalCounts['金牌'] = (medalCounts['金牌'] ?? 0) + 1;
-          if (athlete['rank'] == 2)
+          }
+          if (athlete['rank'] == 2) {
             medalCounts['銀牌'] = (medalCounts['銀牌'] ?? 0) + 1;
-          if (athlete['rank'] == 3)
+          }
+          if (athlete['rank'] == 3) {
             medalCounts['銅牌'] = (medalCounts['銅牌'] ?? 0) + 1;
+          }
         }
       }
     }
@@ -243,14 +473,7 @@ class _AwardListScreenState extends State<AwardListScreen>
         padding: const EdgeInsets.all(16.0),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white,
-              primaryColor.withValues(alpha: 0.05),
-            ],
-          ),
+          color: Colors.white, // 移除漸變，使用純色背景
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -358,11 +581,13 @@ class _AwardListScreenState extends State<AwardListScreen>
   // 構建獎牌數量顯示
   Widget _buildMedalCount(String type, int count, Color color) {
     IconData icon = Icons.workspace_premium;
-    if (type == '金牌')
+    if (type == '金牌') {
       icon = Icons.workspace_premium;
-    else if (type == '銀牌')
+    } else if (type == '銀牌') {
       icon = Icons.workspace_premium;
-    else if (type == '銅牌') icon = Icons.workspace_premium;
+    } else if (type == '銅牌') {
+      icon = Icons.workspace_premium;
+    }
 
     return Column(
       children: [
@@ -448,16 +673,7 @@ class _AwardListScreenState extends State<AwardListScreen>
                   ),
                 )
               : Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        primaryColor.withValues(alpha: 0.05),
-                        Colors.white,
-                      ],
-                    ),
-                  ),
+                  color: Colors.white, // 移除漸變背景，使用純色背景
                   child: RefreshIndicator(
                     onRefresh: _loadAllResults,
                     child: Column(
@@ -575,68 +791,6 @@ class _AwardListScreenState extends State<AwardListScreen>
                                       ),
                                     ],
                                   ),
-                                  // 第二行：學校過濾
-                                  if (_schools.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 12.0),
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.school,
-                                            size: 18,
-                                            color: Colors.blueGrey,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          const Text('按學校過濾: '),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 12),
-                                              decoration: BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                                border: Border.all(
-                                                  color: Colors.grey.shade300,
-                                                  width: 0.5,
-                                                ),
-                                              ),
-                                              child:
-                                                  DropdownButtonHideUnderline(
-                                                child: DropdownButton<String?>(
-                                                  value: _selectedSchool,
-                                                  hint: const Text('選擇學校'),
-                                                  isExpanded: true,
-                                                  items: [
-                                                    const DropdownMenuItem<
-                                                        String?>(
-                                                      value: null,
-                                                      child: Text('所有學校'),
-                                                    ),
-                                                    ..._schools
-                                                        .map((school) =>
-                                                            DropdownMenuItem<
-                                                                String?>(
-                                                              value: school,
-                                                              child:
-                                                                  Text(school),
-                                                            ))
-                                                        .toList(),
-                                                  ],
-                                                  onChanged: (value) {
-                                                    setState(() {
-                                                      _selectedSchool = value;
-                                                      _filterResults();
-                                                    });
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),
@@ -662,10 +816,7 @@ class _AwardListScreenState extends State<AwardListScreen>
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    _selectedSchool != null &&
-                                            _selectedSchool!.isNotEmpty
-                                        ? '正在顯示 $_selectedSchool 學校的成績'
-                                        : '點擊任意項目查看頒獎表格',
+                                    '點擊任意項目查看頒獎表格',
                                     style: TextStyle(
                                       color: Colors.blue.shade700,
                                       fontSize: 14,
@@ -680,159 +831,230 @@ class _AwardListScreenState extends State<AwardListScreen>
 
                         // 項目列表
                         Expanded(
-                          child: filteredWithResults.isEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.search_off_rounded,
-                                        size: 60,
-                                        color: Colors.grey[400],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        '沒有找到任何項目的成績數據',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.grey[600],
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(16.0),
+                            // 添加一個項目用於學校排名
+                            itemCount: filteredWithResults.isEmpty
+                                ? 1
+                                : filteredWithResults.length + 1,
+                            itemBuilder: (context, index) {
+                              // 學校排名項目卡片（始終顯示在第一位）
+                              if (index == 0) {
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 10.0),
+                                  elevation: 1,
+                                  shadowColor:
+                                      Colors.indigo.withValues(alpha: 0.3),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(
+                                      color:
+                                          Colors.indigo.withValues(alpha: 0.3),
+                                      width: 0.5,
+                                    ),
                                   ),
-                                )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.all(16.0),
-                                  itemCount: filteredWithResults.length,
-                                  itemBuilder: (context, index) {
-                                    final result = filteredWithResults[index];
-                                    final eventName =
-                                        result['eventName'] ?? '未知項目';
-                                    final eventType = result['eventType'] ?? '';
-
-                                    // 確定項目類型和顏色
-                                    Color typeColor;
-                                    IconData typeIcon;
-                                    Color bgColor;
-
-                                    switch (eventType) {
-                                      case '徑賽':
-                                        typeColor = Colors.blue.shade700;
-                                        bgColor = Colors.blue.shade50;
-                                        typeIcon = Icons.directions_run;
-                                        break;
-                                      case '田賽':
-                                        typeColor = Colors.green.shade700;
-                                        bgColor = Colors.green.shade50;
-                                        typeIcon = Icons.sports_volleyball;
-                                        break;
-                                      case '接力':
-                                        typeColor = Colors.purple.shade700;
-                                        bgColor = Colors.purple.shade50;
-                                        typeIcon = Icons.people;
-                                        break;
-                                      default:
-                                        typeColor = Colors.grey.shade700;
-                                        bgColor = Colors.grey.shade50;
-                                        typeIcon = Icons.sports;
-                                    }
-
-                                    return Card(
-                                      margin:
-                                          const EdgeInsets.only(bottom: 10.0),
-                                      elevation: 1,
-                                      shadowColor:
-                                          typeColor.withValues(alpha: 0.3),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        side: BorderSide(
-                                          color:
-                                              typeColor.withValues(alpha: 0.3),
-                                          width: 0.5,
-                                        ),
+                                  child: InkWell(
+                                    onTap: () => _navigateToSchoolRanking(),
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.indigo.shade50,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(Icons.leaderboard,
+                                                color: Colors.indigo.shade700,
+                                                size: 24),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                const Text(
+                                                  '學校積分排名',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 16,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.indigo
+                                                        .withValues(alpha: 0.1),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                  ),
+                                                  child: const Text(
+                                                    '排名統計',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.indigo,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.indigo
+                                                  .withValues(alpha: 0.1),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.chevron_right,
+                                              color: Colors.indigo,
+                                              size: 20,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      child: InkWell(
-                                        onTap: () =>
-                                            _navigateToAwardTable(result),
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(16.0),
-                                          child: Row(
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              // 正常的項目卡片
+                              final actualIndex = index - 1; // 因為第一項是學校排名
+                              if (filteredWithResults.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+
+                              final result = filteredWithResults[actualIndex];
+                              final eventName = result['eventName'] ?? '未知項目';
+                              final eventType = result['eventType'] ?? '';
+
+                              // 打印當前項目信息，用於調試
+                              debugPrint('顯示項目: $eventName, 類型: $eventType');
+
+                              // 確定項目類型和顏色
+                              Color typeColor;
+                              IconData typeIcon;
+                              Color bgColor;
+
+                              switch (eventType) {
+                                case '徑賽':
+                                  typeColor = Colors.blue.shade700;
+                                  bgColor = Colors.blue.shade50;
+                                  typeIcon = Icons.directions_run;
+                                  break;
+                                case '田賽':
+                                  typeColor = Colors.green.shade700;
+                                  bgColor = Colors.green.shade50;
+                                  typeIcon = Icons.sports_volleyball;
+                                  break;
+                                case '接力':
+                                  typeColor = Colors.purple.shade700;
+                                  bgColor = Colors.purple.shade50;
+                                  typeIcon = Icons.people;
+                                  break;
+                                default:
+                                  typeColor = Colors.grey.shade700;
+                                  bgColor = Colors.grey.shade50;
+                                  typeIcon = Icons.sports;
+                              }
+
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 10.0),
+                                elevation: 1,
+                                shadowColor: typeColor.withValues(alpha: 0.3),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: typeColor.withValues(alpha: 0.3),
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: InkWell(
+                                  onTap: () => _navigateToAwardTable(result),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: bgColor,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(typeIcon,
+                                              color: typeColor, size: 24),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.all(10),
-                                                decoration: BoxDecoration(
-                                                  color: bgColor,
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: Icon(typeIcon,
-                                                    color: typeColor, size: 24),
-                                              ),
-                                              const SizedBox(width: 16),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      eventName,
-                                                      style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        fontSize: 16,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 3,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: typeColor
-                                                            .withValues(
-                                                                alpha: 0.1),
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(4),
-                                                      ),
-                                                      child: Text(
-                                                        eventType,
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color: typeColor,
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
+                                              Text(
+                                                eventName,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 16,
                                                 ),
                                               ),
+                                              const SizedBox(height: 6),
                                               Container(
                                                 padding:
-                                                    const EdgeInsets.all(8),
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 3,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   color: typeColor.withValues(
                                                       alpha: 0.1),
-                                                  shape: BoxShape.circle,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
                                                 ),
-                                                child: Icon(
-                                                  Icons.chevron_right,
-                                                  color: typeColor,
-                                                  size: 20,
+                                                child: Text(
+                                                  eventType,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: typeColor,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
-                                      ),
-                                    );
-                                  },
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: typeColor.withValues(
+                                                alpha: 0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.chevron_right,
+                                            color: typeColor,
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
+                              );
+                            },
+                          ),
                         ),
                       ],
                     ),
@@ -921,7 +1143,9 @@ class _AwardTableScreenState extends State<AwardTableScreen> {
 
   // 加載運動員的學校信息
   Future<void> _loadAthleteSchools() async {
-    if (!mounted) return; // 初始檢查
+    if (!mounted) {
+      return;
+    } // 初始檢查
 
     _safeSetState(() {
       _isLoadingSchools = true;
@@ -930,7 +1154,9 @@ class _AwardTableScreenState extends State<AwardTableScreen> {
     try {
       final String competitionId = widget.eventData['competitionId'] ?? '';
       if (competitionId.isEmpty) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         _safeSetState(() {
           _isLoadingSchools = false;
         });
@@ -939,7 +1165,9 @@ class _AwardTableScreenState extends State<AwardTableScreen> {
 
       final List<dynamic> results = widget.eventData['results'] ?? [];
       if (results.isEmpty) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         _safeSetState(() {
           _isLoadingSchools = false;
         });
@@ -970,7 +1198,9 @@ class _AwardTableScreenState extends State<AwardTableScreen> {
       }
 
       if (athleteIds.isEmpty) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         _safeSetState(() {
           _isLoadingSchools = false;
         });
@@ -981,7 +1211,9 @@ class _AwardTableScreenState extends State<AwardTableScreen> {
       // 將運動員分批處理，每批次最多25個（符合 Firestore 限制）
       const int maxBatchSize = 25;
       for (int i = 0; i < athleteIds.length; i += maxBatchSize) {
-        if (!mounted) break;
+        if (!mounted) {
+          break;
+        }
 
         final int end = (i + maxBatchSize < athleteIds.length)
             ? i + maxBatchSize
@@ -1018,7 +1250,9 @@ class _AwardTableScreenState extends State<AwardTableScreen> {
   // 批量獲取運動員學校，提高效率
   Future<void> _batchLoadSchools(
       List<String> athleteIds, String competitionId) async {
-    if (athleteIds.isEmpty || !mounted) return;
+    if (athleteIds.isEmpty || !mounted) {
+      return;
+    }
 
     try {
       final FirebaseFirestore firestore = FirebaseFirestore.instance;
@@ -1033,7 +1267,9 @@ class _AwardTableScreenState extends State<AwardTableScreen> {
       final results = await Future.wait(futures);
 
       // 處理結果
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       final Map<String, String> newSchools = {};
       for (int i = 0; i < athleteIds.length; i++) {
@@ -1114,16 +1350,7 @@ class _AwardTableScreenState extends State<AwardTableScreen> {
         elevation: 0,
       ),
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              typeColor.withValues(alpha: 0.1),
-              Colors.white,
-            ],
-          ),
-        ),
+        color: Colors.white, // 移除漸變背景，使用純色背景
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1141,14 +1368,7 @@ class _AwardTableScreenState extends State<AwardTableScreen> {
                     padding: const EdgeInsets.all(16.0),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white,
-                          bgColor.withValues(alpha: 0.3),
-                        ],
-                      ),
+                      color: Colors.white, // 移除漸變，使用純色背景
                     ),
                     child: Row(
                       children: [

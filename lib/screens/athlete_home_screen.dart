@@ -4,9 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart'; // 新增導入
 import '../utils/colors.dart';
 import '../utils/utils.dart'; // 導入工具函數
+import '../utils/searching_function.dart'; // 添加搜索函數的導入
+import '../utils/sorting_function.dart'; // 添加排序函數的導入
 import '../resources/auth_methods.dart';
 import 'athlete_competition_view.dart';
-import 'login_screen.dart';
 
 /// 運動員首頁屏幕
 ///
@@ -203,45 +204,41 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
     );
   }
 
-  // 優化：改進過濾比賽功能，使其更高效
   void _filterCompetitions() {
     if (!mounted) return;
 
     final searchQuery = _searchController.text.toLowerCase();
 
     setState(() {
-      // 使用單個過濾方法減少代碼重複
-      _filteredUserCompetitions =
-          _filterCompetitionList(_userCompetitions, searchQuery);
-      _filteredAvailableCompetitions =
-          _filterCompetitionList(_availableCompetitions, searchQuery);
+      _filteredUserCompetitions = linearSearchMap(
+          _userCompetitions, searchQuery, 'all',
+          isSorted: true, sortField: 'name');
+
+      _filteredAvailableCompetitions = linearSearchMap(
+          _availableCompetitions, searchQuery, 'all',
+          isSorted: true, sortField: 'name');
+
+      _sortCompetitions();
     });
   }
 
-  // 新增：共用的過濾邏輯
-  List<Map<String, dynamic>> _filterCompetitionList(
-      List<Map<String, dynamic>> competitions, String searchQuery) {
-    if (searchQuery.isEmpty) {
-      return List.from(competitions); // 無過濾條件，返回原始列表
-    }
+  // 新增：按比賽名稱對列表進行排序
+  void _sortCompetitions() {
+    // 創建臨時列表進行排序
+    final List<Map<String, dynamic>> sortedUserCompetitions = sortByAlphabet(
+      _filteredUserCompetitions,
+      'name',
+    );
 
-    return competitions.where((competition) {
-      // 進行文本搜索
-      final name = competition['name']?.toString().toLowerCase() ?? '';
-      final venue = competition['venue']?.toString().toLowerCase() ?? '';
-      final startDate =
-          competition['startDate']?.toString().toLowerCase() ?? '';
-      final endDate = competition['endDate']?.toString().toLowerCase() ?? '';
-      final description =
-          competition['description']?.toString().toLowerCase() ?? '';
+    final List<Map<String, dynamic>> sortedAvailableCompetitions =
+        sortByAlphabet(
+      _filteredAvailableCompetitions,
+      'name',
+    );
 
-      // 改進搜索，同時在多個字段中搜索
-      return name.contains(searchQuery) ||
-          venue.contains(searchQuery) ||
-          startDate.contains(searchQuery) ||
-          endDate.contains(searchQuery) ||
-          description.contains(searchQuery);
-    }).toList();
+    // 更新狀態
+    _filteredUserCompetitions = sortedUserCompetitions;
+    _filteredAvailableCompetitions = sortedAvailableCompetitions;
   }
 
   // 加入比賽
@@ -316,7 +313,7 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2, // 因為有兩個標籤頁：'我的比賽'和'可報名比賽'
+      length: 2, // 兩個標籤頁：「我已追蹤的比賽」和「全部比賽」
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
@@ -333,39 +330,7 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
                 HapticFeedback.mediumImpact(); // 添加震動反饋
               },
             ),
-            // 添加SQLite測試按鈕
-            IconButton(
-              icon: const Icon(Icons.storage),
-              tooltip: 'SQLite測試',
-              onPressed: () {
-                Navigator.pushNamed(context, '/sqlite_test');
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.exit_to_app),
-              onPressed: () async {
-                // 登出並返回登入頁
-                await _authMethods.signOut();
-                if (mounted) {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (context) => const LoginScreen(),
-                    ),
-                  );
-                }
-              },
-            ),
           ],
-          bottom: const TabBar(
-            indicatorColor: Colors.white,
-            indicatorWeight: 3,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            tabs: [
-              Tab(text: '我的比賽'),
-              Tab(text: '可報名比賽'),
-            ],
-          ),
         ),
         body: Column(
           children: [
@@ -375,64 +340,53 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
             // 搜索和過濾
             _buildSearchBar(),
 
-            // 標籤欄
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const TabBar(
-                tabs: [
-                  Tab(
-                    icon: Icon(Icons.sports),
-                    text: '已追蹤比賽',
-                  ),
-                  Tab(
-                    icon: Icon(Icons.add_circle_outline),
-                    text: '可報名比賽',
-                  ),
-                ],
-                labelColor: primaryColor,
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: primaryColor,
-                indicatorWeight: 3,
-                indicatorSize: TabBarIndicatorSize.label,
-                labelStyle: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-                unselectedLabelStyle: TextStyle(
-                  fontWeight: FontWeight.normal,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-
             // 標籤頁內容
             Expanded(
               child: TabBarView(
                 children: [
                   _buildTrackedCompetitionsTab(),
-                  _buildAvailableCompetitionsTab(),
+                  _buildAllCompetitionsTab(),
                 ],
               ),
             ),
           ],
         ),
-        // 添加浮動按鈕進入SQLite測試頁面
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () {
-            Navigator.pushNamed(context, '/sqlite_test');
-          },
-          backgroundColor: Colors.orange,
-          icon: const Icon(Icons.storage),
-          label: const Text('測試SQLite'),
+        // 重新添加底部導航欄
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: TabBar(
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicator: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: primaryColor, width: 3),
+              ),
+            ),
+            labelColor: primaryColor,
+            unselectedLabelColor: Colors.grey[600],
+            labelStyle:
+                const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            tabs: [
+              Tab(
+                icon: const Icon(Icons.bookmark),
+                text: '已追蹤比賽',
+                iconMargin: const EdgeInsets.only(bottom: 4),
+              ),
+              Tab(
+                icon: const Icon(Icons.sports_score),
+                text: '全部比賽',
+                iconMargin: const EdgeInsets.only(bottom: 4),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -717,88 +671,9 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
     );
   }
 
-  // 構建底部選項菜單
-  Widget _buildOptionsBottomSheet() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '更多操作',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.refresh, color: Colors.blue),
-              title: const Text('刷新比賽列表'),
-              onTap: () {
-                Navigator.pop(context);
-                _loadUserCompetitions();
-                _loadAvailableCompetitions();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已刷新比賽列表')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person, color: Colors.green),
-              title: const Text('查看個人資料'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/athlete-edit-profile');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.help_outline, color: Colors.orange),
-              title: const Text('常見問題'),
-              onTap: () {
-                Navigator.pop(context);
-                // 顯示常見問題對話框
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('常見問題'),
-                    content: const SingleChildScrollView(
-                      child: ListBody(
-                        children: [
-                          Text('Q: 如何報名比賽？',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('A: 在「可報名比賽」標籤頁中，點擊相應比賽卡片上的「加入比賽」按鈕即可。'),
-                          SizedBox(height: 8),
-                          Text('Q: 如何查看我的比賽詳情？',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('A: 在「已追蹤比賽」標籤頁中，點擊相應比賽卡片上的「查看詳情」按鈕。'),
-                          SizedBox(height: 8),
-                          Text('Q: 如何搜索特定比賽？',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('A: 使用頁面頂部的搜索欄輸入比賽名稱、地點或日期關鍵詞進行搜索。'),
-                        ],
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('關閉'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // 優化：提取構建比賽卡片為更高效的方法
   Widget _buildCompetitionItem(
-      Map<String, dynamic> competition, bool isRegistered) {
+      Map<String, dynamic> competition, bool isTracked) {
     final String competitionId = competition['id'] ?? '';
     final String competitionName = competition['name'] ?? '未命名比賽';
     final String venue = competition['venue'] ?? '未設置場地';
@@ -840,6 +715,31 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (isTracked)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check,
+                              size: 14, color: Colors.green.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            '已追蹤',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
 
@@ -897,32 +797,30 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (isRegistered)
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _viewCompetitionDetails(competitionId),
-                        icon: const Icon(Icons.visibility, size: 18),
-                        label: const Text('查看詳情'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          elevation: 1,
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _joinCompetition(competitionId),
-                        icon: const Icon(Icons.add_circle, size: 18),
-                        label: const Text('加入比賽'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          elevation: 1,
-                        ),
-                      ),
-                    ),
+                  Expanded(
+                    child: isTracked
+                        ? ElevatedButton.icon(
+                            onPressed: () =>
+                                _viewCompetitionDetails(competitionId),
+                            icon: const Icon(Icons.visibility, size: 18),
+                            label: const Text('查看詳情'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              elevation: 1,
+                            ),
+                          )
+                        : ElevatedButton.icon(
+                            onPressed: () => _joinCompetition(competitionId),
+                            icon: const Icon(Icons.add_circle, size: 18),
+                            label: const Text('加入比賽'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              elevation: 1,
+                            ),
+                          ),
+                  ),
                 ],
               ),
             ],
@@ -963,9 +861,8 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
         child: _buildEmptyState(
           icon: Icons.sports_outlined,
           title: '您尚未追蹤任何比賽',
-          message: _searchController.text.isNotEmpty
-              ? '嘗試使用不同的搜索關鍵詞'
-              : '點擊"可報名比賽"標籤查看可用比賽',
+          message:
+              _searchController.text.isNotEmpty ? '嘗試使用不同的搜索關鍵詞' : '目前沒有可查看的比賽',
         ),
       );
     }
@@ -980,9 +877,9 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         controller: _scrollController,
-        itemCount: _filteredUserCompetitions.length, // 移除+1，不再顯示統計信息頭部
+        itemCount: _filteredUserCompetitions.length,
         itemBuilder: (context, index) {
-          // 直接顯示比賽卡片，不再需要額外條件檢查
+          // 直接顯示比賽卡片
           final competition = _filteredUserCompetitions[index];
           return _buildCompetitionItem(competition, true);
         },
@@ -990,376 +887,51 @@ class _AthleteHomeScreenState extends State<AthleteHomeScreen> {
     );
   }
 
-  // 優化：構建可報名比賽標籤頁 - 使用ListView.builder
-  Widget _buildAvailableCompetitionsTab() {
+  // 構建全部比賽標籤頁
+  Widget _buildAllCompetitionsTab() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_filteredAvailableCompetitions.isEmpty) {
+    final allCompetitions = [..._userCompetitions, ..._availableCompetitions];
+
+    // 根據搜索關鍵詞過濾
+    final filteredAll = _searchController.text.isEmpty
+        ? allCompetitions
+        : linearSearchMap(allCompetitions, _searchController.text, '全部',
+                isSorted: false, sortField: 'name')
+            .toList();
+
+    // 根據比賽名稱排序
+    final sortedAll = sortByAlphabet(filteredAll, 'name');
+
+    if (sortedAll.isEmpty) {
       return Center(
         child: _buildEmptyState(
           icon: Icons.search_off,
-          title:
-              _searchController.text.isNotEmpty ? '找不到符合條件的比賽' : '目前沒有可報名的比賽',
+          title: _searchController.text.isNotEmpty ? '找不到符合條件的比賽' : '目前沒有任何比賽',
           message: _searchController.text.isNotEmpty ? '嘗試修改搜索條件' : '稍後再來查看',
         ),
       );
     }
 
-    // 使用延遲加載設計模式
+    // 使用RefreshIndicator支持下拉刷新
     return RefreshIndicator(
       onRefresh: () async {
         HapticFeedback.lightImpact();
+        await _loadUserCompetitions();
         await _loadAvailableCompetitions();
       },
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        controller: _scrollController,
-        itemCount:
-            2 + _filteredAvailableCompetitions.length, // 1個推薦區塊 + 1個標題 + 列表
+        itemCount: sortedAll.length,
         itemBuilder: (context, index) {
-          // 推薦區塊
-          if (index == 0) {
-            return _buildRecommendedSection();
-          }
-
-          // "全部比賽"標題
-          if (index == 1) {
-            return const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                '全部比賽',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0A0E53),
-                ),
-              ),
-            );
-          }
-
-          // 比賽卡片
-          final competition =
-              _filteredAvailableCompetitions[index - 2]; // -2 因為前面有推薦和標題
-          return _buildCompetitionItem(competition, false);
+          final competition = sortedAll[index];
+          // 檢查是否為已追蹤的比賽
+          final isTracked =
+              _userCompetitions.any((c) => c['id'] == competition['id']);
+          return _buildCompetitionItem(competition, isTracked);
         },
-      ),
-    );
-  }
-
-  // 新增：構建推薦部分
-  Widget _buildRecommendedSection() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      // 加入緩存：使用key確保每次刷新時重建
-      key: ValueKey(_searchController.text),
-      future: _getRecommendedCompetitions(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 100,
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                '🌟 為您推薦',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0A0E53),
-                ),
-              ),
-            ),
-            SizedBox(
-              height: 220,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: snapshot.data!.length,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                itemBuilder: (context, index) {
-                  final competition = snapshot.data![index];
-                  return _buildRecommendedCompetitionCard(competition);
-                },
-              ),
-            ),
-            const Divider(height: 24, indent: 16, endIndent: 16),
-          ],
-        );
-      },
-    );
-  }
-
-  // 為運動員推薦適合的比賽
-  Future<List<Map<String, dynamic>>> _getRecommendedCompetitions() async {
-    try {
-      // 獲取用戶生日
-      final userDoc =
-          await _firestore.collection('users').doc(widget.userId).get();
-      if (!userDoc.exists) return [];
-
-      final userData = userDoc.data() as Map<String, dynamic>;
-      final birthday = userData['birthday'] as String?;
-      if (birthday == null || birthday.isEmpty) return [];
-
-      final age = calculateAge(birthday);
-      if (age == null) return [];
-
-      // 根據年齡篩選適合的比賽
-      return _filteredAvailableCompetitions
-          .where((comp) {
-            // 如果比賽有metadata
-            if (comp['metadata'] != null) {
-              // 嘗試從年齡組別中篩選
-              if (comp['metadata']['age_groups'] != null) {
-                List<dynamic> ageGroups = comp['metadata']['age_groups'];
-
-                for (var group in ageGroups) {
-                  if (group is Map<String, dynamic> &&
-                      group.containsKey('minAge') &&
-                      group.containsKey('maxAge')) {
-                    int minAge = group['minAge'];
-                    int maxAge = group['maxAge'];
-
-                    if (age >= minAge && age <= maxAge) {
-                      return true;
-                    }
-                  }
-                }
-              }
-
-              // 嘗試從報名表單中篩選
-              if (comp['metadata']['registration_form'] != null) {
-                final form = comp['metadata']['registration_form']
-                    as Map<String, dynamic>?;
-                if (form != null) {
-                  // 檢查年齡限制
-                  final minAge = form['min_age'];
-                  final maxAge = form['max_age'];
-
-                  if (minAge != null && maxAge != null) {
-                    return age >= minAge && age <= maxAge;
-                  }
-                }
-              }
-            }
-
-            // 如果沒有年齡限制，默認返回false（不推薦）
-            return false;
-          })
-          .take(5)
-          .toList();
-    } catch (e) {
-      debugPrint('獲取推薦比賽出錯: $e');
-      return [];
-    }
-  }
-
-  // 構建推薦比賽卡片
-  Widget _buildRecommendedCompetitionCard(Map<String, dynamic> competition) {
-    final name = competition['name'] as String? ?? '未命名比賽';
-    final venue = competition['venue'] as String? ?? '未知場地';
-    final startDate = competition['startDate'] as String? ?? '未知日期';
-
-    // 計算報名截止日期剩餘天數
-    String? deadlineText;
-    if (competition['metadata'] != null &&
-        competition['metadata']['registration_form'] != null &&
-        competition['metadata']['registration_form']['deadline'] != null) {
-      try {
-        final deadline =
-            competition['metadata']['registration_form']['deadline'];
-        DateTime deadlineDate;
-
-        if (deadline is String) {
-          deadlineDate = DateTime.parse(deadline);
-        } else if (deadline is Timestamp) {
-          deadlineDate = deadline.toDate();
-        } else {
-          throw Exception('不支援的日期格式');
-        }
-
-        final now = DateTime.now();
-        final daysRemaining = deadlineDate.difference(now).inDays;
-
-        if (daysRemaining > 0) {
-          deadlineText = '剩餘 $daysRemaining 天';
-        } else if (daysRemaining == 0) {
-          deadlineText = '今天截止!';
-        } else {
-          deadlineText = '已截止報名';
-        }
-      } catch (e) {
-        debugPrint('計算報名截止日期出錯: $e');
-      }
-    }
-
-    return Container(
-      width: 250,
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 24,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: primaryColor.withValues(alpha: 0.1),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.star, size: 14, color: Colors.amber[700]),
-                const SizedBox(width: 4),
-                const Text(
-                  '適合您的年齡',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: primaryColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        venue,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.calendar_today,
-                        size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      startDate.split('T')[0],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-                if (deadlineText != null) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.timer_outlined,
-                          size: 14,
-                          color: deadlineText.contains('已截止')
-                              ? Colors.red
-                              : (deadlineText.contains('今天')
-                                  ? Colors.orange
-                                  : Colors.green)),
-                      const SizedBox(width: 4),
-                      Text(
-                        deadlineText,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: deadlineText.contains('已截止')
-                              ? Colors.red
-                              : (deadlineText.contains('今天')
-                                  ? Colors.orange
-                                  : Colors.green),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _viewCompetitionDetails(competition['id']),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: primaryColor,
-                      side: const BorderSide(color: primaryColor),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: EdgeInsets.zero,
-                    ),
-                    child: const Text('查看詳情'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _joinCompetition(competition['id']),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: EdgeInsets.zero,
-                    ),
-                    child: const Text('立即報名'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

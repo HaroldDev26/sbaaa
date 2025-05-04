@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:logging/logging.dart';
 import '../models/competition.dart';
+import '../utils/searching_function.dart'; // 添加搜索函數的導入
 import 'database_helper.dart'; // 使用DatabaseHelper
 import 'competition_manager.dart'; // 使用CompetitionManager
 
@@ -110,35 +112,15 @@ class CompetitionData {
     }
   }
 
-  // 獲取符合條件的比賽列表
   Future<List<CompetitionModel>> getFilteredCompetitions(
       String query, String filter) async {
-    // 確保數據已加載
     if (_competitions.isEmpty) {
       await loadCompetitions();
     }
 
-    // 使用線性搜索篩選數據
-    String lowerQuery = query.toLowerCase();
-    List<CompetitionModel> results = [];
-
-    int i = 0;
-    while (i < _competitions.length) {
-      final competition = _competitions[i];
-
-      // 只過濾名稱，不再檢查狀態
-      if (query.isEmpty ||
-          competition.name.toLowerCase().contains(lowerQuery)) {
-        results.add(competition);
-      }
-
-      i++;
-    }
-
-    return results;
+    return searchCompetitions(_competitions, query, filter);
   }
 
-  // 添加新比賽
   Future<String> addCompetition(Map<String, dynamic> competitionData) async {
     String id = '';
     bool firebaseSuccess = false;

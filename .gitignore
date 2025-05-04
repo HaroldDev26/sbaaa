@@ -29,17 +29,90 @@ migrate_working_dir/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
+.packages
 .pub-cache/
 .pub/
 /build/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
+.fvm/
 
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android 相關
+**/android/**/gradle-wrapper.jar
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.*
+
+# iOS/XCode 相關
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+**/ios/.generated/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# macOS 相關
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Flutter/Flutter-Debug.xcconfig
+**/macos/Flutter/Flutter-Release.xcconfig
+**/macos/Flutter/Flutter-Profile.xcconfig
+
+# Web 相關
+**/web/favicon.png
+**/web/icons/
+**/web/manifest.json
+
+# VS Code 相關
+.vscode/
+.history/
+*.code-workspace
+
+# Android Studio 相關
+.idea/
+*.iml
+.DS_Store
+
+# Firebase 配置文件
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase_options.dart
+
+# 編譯生成的文件
+*.dart.js
+*.info.json
+*.js
+*.js.deps
+*.js.map
+
+# 日誌文件
+*.log
+
+# SQLite 資料庫文件
+*.db
+*.sqlite
+*.sqlite3

@@ -400,28 +400,122 @@ class _CompetitionDetailScreenState extends State<CompetitionDetailScreen> {
       return const SizedBox.shrink();
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: primaryColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              roles.join(' • '),
-              style: TextStyle(
-                color: primaryColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+    // 當角色數量小於等於2時，直接顯示
+    if (roles.length <= 2) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                roles.join(' • '),
+                style: TextStyle(
+                  color: primaryColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
+          ],
+        ),
+      );
+    }
+    // 超過2個角色時，使用可展開的形式顯示
+    else {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Container(
+          width: double.infinity,
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              // 顯示第一個角色
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  roles[0],
+                  style: TextStyle(
+                    color: primaryColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              // 顯示+N更多標籤並點擊展開
+              InkWell(
+                onTap: () {
+                  // 顯示所有角色的對話框
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('您的角色'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: roles.map((role) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              children: [
+                                Icon(Icons.check_circle,
+                                    color: primaryColor, size: 16),
+                                const SizedBox(width: 8),
+                                Text(role,
+                                    style: const TextStyle(fontSize: 14)),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('確定'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "+${roles.length - 1} 角色",
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(Icons.expand_more,
+                          size: 12, color: Colors.grey[700]),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+        ),
+      );
+    }
   }
 
   @override

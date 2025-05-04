@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../../utils/searching_function.dart';
 import 'track_event_timer_screen.dart';
 import 'field_event_record_screen.dart';
 import 'event_result_screen.dart';
@@ -23,7 +23,6 @@ class ResultRecordScreen extends StatefulWidget {
 class _ResultRecordScreenState extends State<ResultRecordScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isLoading = true;
   List<Map<String, dynamic>> _events = [];
@@ -131,7 +130,7 @@ class _ResultRecordScreenState extends State<ResultRecordScreen>
         for (var event in eventsList) {
           if (event is Map<String, dynamic> && event.containsKey('name')) {
             final eventName = event['name'] as String;
-            final eventType = _eventTypeMap[eventName] ?? '未分類';
+            final eventType = _eventTypeMap[eventName] ?? '徑賽';
             events.add({
               'id': eventName,
               'name': eventName,
@@ -154,7 +153,7 @@ class _ResultRecordScreenState extends State<ResultRecordScreen>
               continue;
             }
 
-            final eventType = _eventTypeMap[eventName] ?? '未分類';
+            final eventType = _eventTypeMap[eventName] ?? '徑賽';
             events.add({
               'id': eventName,
               'name': eventName,
@@ -213,10 +212,12 @@ class _ResultRecordScreenState extends State<ResultRecordScreen>
   void _filterEventsByType() {
     final selectedType = _eventTypes[_selectedEventTypeIndex];
     setState(() {
-      _matchedEvents = _events
-          .where((event) =>
-              event['type'] == selectedType || event['type'] == '未分類')
-          .toList();
+      // 使用專用的searchEvents函數進行篩選
+      _matchedEvents = searchEvents(
+        _events,
+        '', // 無搜索關鍵詞
+        {'category': selectedType}, // 使用項目類型作為過濾條件
+      );
     });
   }
 
@@ -637,9 +638,7 @@ class _ResultRecordScreenState extends State<ResultRecordScreen>
                                   side: BorderSide(
                                     color: eventType == '接力'
                                         ? Colors.purple.shade200
-                                        : eventType == '未分類'
-                                            ? Colors.orange.shade200
-                                            : Colors.transparent,
+                                        : Colors.transparent,
                                     width: eventType == '接力' ? 2 : 1,
                                   ),
                                 ),
@@ -660,16 +659,12 @@ class _ResultRecordScreenState extends State<ResultRecordScreen>
                                             CircleAvatar(
                                               backgroundColor: eventType == '接力'
                                                   ? Colors.purple.shade100
-                                                  : eventType == '未分類'
-                                                      ? Colors.orange.shade100
-                                                      : Colors.blue.shade100,
+                                                  : Colors.blue.shade100,
                                               child: Icon(
                                                 typeIcon,
                                                 color: eventType == '接力'
                                                     ? Colors.purple
-                                                    : eventType == '未分類'
-                                                        ? Colors.orange
-                                                        : Colors.blue,
+                                                    : Colors.blue,
                                               ),
                                             ),
                                             const SizedBox(width: 12),
@@ -687,13 +682,11 @@ class _ResultRecordScreenState extends State<ResultRecordScreen>
                                                     ),
                                                   ),
                                                   Text(
-                                                    '類型: ${eventType == '未分類' ? '未設定類型' : eventType}',
+                                                    '類型: $eventType',
                                                     style: TextStyle(
                                                       color: eventType == '接力'
                                                           ? Colors.purple
-                                                          : eventType == '未分類'
-                                                              ? Colors.orange
-                                                              : Colors.green,
+                                                          : Colors.green,
                                                       fontWeight: eventType ==
                                                               '接力'
                                                           ? FontWeight.bold

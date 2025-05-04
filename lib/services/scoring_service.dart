@@ -1,7 +1,9 @@
-/// 體育賽事積分計算服務
-/// 提供各種比賽項目的積分計算和排名功能
+import '../utils/sorting_function.dart';
+
+/// Athletic competition scoring service
+/// Provides scoring calculation and ranking functionalities for various event types
 class ScoringService {
-  /// 單例模式實現
+  /// Singleton implementation
   static final ScoringService _instance = ScoringService._internal();
 
   factory ScoringService() {
@@ -10,14 +12,14 @@ class ScoringService {
 
   ScoringService._internal();
 
-  /// 根據排名計算積分
+  /// Calculate score based on ranking
   ///
-  /// [rank] 選手排名
-  /// [isRelay] 是否為接力項目
+  /// [rank] Athlete's ranking position
+  /// [isRelay] Whether it's a relay event
   ///
-  /// 返回計算後的積分
+  /// Returns the calculated score
   int calculateScoreByRank(int rank, {bool isRelay = false}) {
-    // 根據排名分配基礎積分
+    // Assign base score according to ranking
     int baseScore = 0;
 
     switch (rank) {
@@ -50,41 +52,37 @@ class ScoringService {
         break;
     }
 
-    // 如果是接力項目，積分翻倍
+    // Double the score for relay events
     return isRelay ? baseScore * 2 : baseScore;
   }
 
-  /// 對田賽選手進行排序和積分計算
+  /// Sort and calculate scores for field event athletes
   ///
-  /// [athletes] 選手列表，每個選手為 Map<String, dynamic>
-  /// [isRelayEvent] 是否為接力項目
+  /// [athletes] List of athletes, each as Map<String, dynamic>
+  /// [isRelayEvent] Whether it's a relay event
   ///
-  /// 返回排序後的選手列表，包含排名和積分
+  /// Returns the sorted list of athletes with ranking and scores
   List<Map<String, dynamic>> sortAndRankFieldEventAthletes(
       List<Map<String, dynamic>> athletes,
       {bool isRelayEvent = false}) {
-    // 創建新列表避免修改原始數據
-    final List<Map<String, dynamic>> result = List.from(athletes);
+    if (athletes.isEmpty) return [];
 
-    // 按最佳成績排序 (越大越好)
-    result.sort((a, b) {
-      final resultA = a['bestResult'] as double? ?? 0.0;
-      final resultB = b['bestResult'] as double? ?? 0.0;
-      // 降序排列，所以是 b 比較 a
-      return resultB.compareTo(resultA);
-    });
+    // Use sortByScore function from sorting_function.dart to sort athletes by best result
+    // For field events, higher results are better, so use ascending=false (descending order)
+    final List<Map<String, dynamic>> result =
+        sortByScore(athletes, 'bestResult', ascending: false);
 
-    // 更新排名和計算積分
+    // Update ranking and calculate scores
     for (int i = 0; i < result.length; i++) {
-      // 處理平局情況
+      // Handle tie situations
       if (i > 0 &&
           (result[i]['bestResult'] as double? ?? 0.0) ==
               (result[i - 1]['bestResult'] as double? ?? 0.0)) {
-        // 平局，使用相同排名
+        // Tie, use the same ranking
         result[i]['rank'] = result[i - 1]['rank'];
         result[i]['score'] = result[i - 1]['score'];
       } else {
-        // 不是平局，使用當前索引+1作為排名
+        // Not a tie, use current index+1 as ranking
         result[i]['rank'] = i + 1;
         result[i]['score'] = calculateScoreByRank(i + 1, isRelay: isRelayEvent);
       }
@@ -93,36 +91,36 @@ class ScoringService {
     return result;
   }
 
-  /// 對徑賽/接力賽選手進行排序和積分計算
+  /// Sort and calculate scores for track/relay event athletes
   ///
-  /// [athletes] 選手列表，每個選手為 Map<String, dynamic>
-  /// [isRelayEvent] 是否為接力項目
+  /// [athletes] List of athletes, each as Map<String, dynamic>
+  /// [isRelayEvent] Whether it's a relay event
   ///
-  /// 返回排序後的選手列表，包含排名和積分
+  /// Returns the sorted list of athletes with ranking and scores
   List<Map<String, dynamic>> sortAndRankTrackEventAthletes(
       List<Map<String, dynamic>> athletes,
       {bool isRelayEvent = false}) {
-    // 創建新列表避免修改原始數據
-    final List<Map<String, dynamic>> result = List.from(athletes);
+    if (athletes.isEmpty) return [];
 
-    // 按時間排序 (越小越好)
-    result.sort((a, b) {
+    // Use quickSort from sorting_function.dart for more efficient sorting
+    // For track events, lower times are better
+    final List<Map<String, dynamic>> result = quickSort(athletes, (a, b) {
       final timeA = a['time'] as int? ?? 0;
       final timeB = b['time'] as int? ?? 0;
       return timeA.compareTo(timeB);
     });
 
-    // 更新排名和計算積分
+    // Update ranking and calculate scores
     for (int i = 0; i < result.length; i++) {
-      // 處理平局情況
+      // Handle tie situations
       if (i > 0 &&
           (result[i]['time'] as int? ?? 0) ==
               (result[i - 1]['time'] as int? ?? 0)) {
-        // 平局，使用相同排名
+        // Tie, use the same ranking
         result[i]['rank'] = result[i - 1]['rank'];
         result[i]['score'] = result[i - 1]['score'];
       } else {
-        // 不是平局，使用當前索引+1作為排名
+        // Not a tie, use current index+1 as ranking
         result[i]['rank'] = i + 1;
         result[i]['score'] = calculateScoreByRank(i + 1, isRelay: isRelayEvent);
       }
@@ -131,36 +129,70 @@ class ScoringService {
     return result;
   }
 
-  /// 根據項目類型自動選擇適當的排序和積分計算方法
+  /// Automatically select appropriate sorting and scoring method based on event type
   ///
-  /// [athletes] 選手列表
-  /// [eventType] 項目類型（徑賽/田賽）
-  /// [eventName] 項目名稱，用於判斷是否為接力賽
+  /// [athletes] List of athletes
+  /// [eventType] Event type (track/field)
+  /// [eventName] Event name, used to determine if it's a relay event
   ///
-  /// 返回排序和計分後的選手列表
+  /// Returns sorted and scored list of athletes
   List<Map<String, dynamic>> rankAthletesByEventType(
       List<Map<String, dynamic>> athletes, String eventType, String eventName) {
-    final bool isRelayEvent = eventName.toLowerCase().contains('接力');
+    // Support both English "relay" and Chinese "接力" keywords for relay events
+    final bool isRelayEvent = eventName.toLowerCase().contains('relay') ||
+        eventName.toLowerCase().contains('接力');
 
-    if (eventType.toLowerCase() == '田賽') {
+    // Support both English "field" and Chinese "田賽" event types
+    if (eventType.toLowerCase() == 'field' ||
+        eventType.toLowerCase() == 'field event') {
       return sortAndRankFieldEventAthletes(athletes,
           isRelayEvent: isRelayEvent);
     } else {
-      // 默認為徑賽或接力賽
+      // Default to track or relay events
       return sortAndRankTrackEventAthletes(athletes,
           isRelayEvent: isRelayEvent);
     }
   }
 
-  /// 獲取積分說明文本
+  /// Sort athletes by their name alphabetically
   ///
-  /// [isRelayEvent] 是否為接力項目
+  /// [athletes] List of athletes
   ///
-  /// 返回積分規則的描述文本
+  /// Returns sorted list of athletes by name
+  List<Map<String, dynamic>> sortAthletesByName(
+      List<Map<String, dynamic>> athletes) {
+    return sortByAlphabet(athletes, 'name');
+  }
+
+  /// Sort athletes by school name
+  ///
+  /// [athletes] List of athletes
+  ///
+  /// Returns sorted list of athletes by school
+  List<Map<String, dynamic>> sortAthletesBySchool(
+      List<Map<String, dynamic>> athletes) {
+    return sortBySchool(athletes);
+  }
+
+  /// Sort athletes by age group
+  ///
+  /// [athletes] List of athletes
+  ///
+  /// Returns sorted list of athletes by age group
+  List<Map<String, dynamic>> sortAthletesByAgeGroup(
+      List<Map<String, dynamic>> athletes) {
+    return sortByAgeGroup(athletes);
+  }
+
+  /// Get scoring explanation text
+  ///
+  /// [isRelayEvent] Whether it's a relay event
+  ///
+  /// Returns description text of scoring rules
   String getScoringDescription({required bool isRelayEvent}) {
     if (isRelayEvent) {
-      return '積分分配：第1名（22分) 第2名(18分) 第3名(14分) 第4名(10分) 第5名(8分) 第6名(6分) 第7名(4分) 第8名(2分)';
+      return 'Scoring system: 1st place (22 pts), 2nd place (18 pts), 3rd place (14 pts), 4th place (10 pts), 5th place (8 pts), 6th place (6 pts), 7th place (4 pts), 8th place (2 pts)';
     }
-    return '積分分配：第1名(11分) 第2名(9分) 第3名(7分) 第4名(5分) 第5名(4分) 第6名(3分) 第7名(2分) 第8名(1分)';
+    return 'Scoring system: 1st place (11 pts), 2nd place (9 pts), 3rd place (7 pts), 4th place (5 pts), 5th place (4 pts), 6th place (3 pts), 7th place (2 pts), 8th place (1 pt)';
   }
 }

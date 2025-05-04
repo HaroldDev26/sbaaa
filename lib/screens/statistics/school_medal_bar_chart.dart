@@ -36,7 +36,6 @@ class _SchoolMedalBarChartState extends State<SchoolMedalBarChart> {
 
   // 圖表顯示相關設定
   int _maxDisplayedSchools = 10; // 最多顯示幾個學校
-  bool _initialized = false;
   bool _isLoadingSchools = false;
   bool _showLegend = true; // 是否顯示圖例
 
@@ -143,7 +142,6 @@ class _SchoolMedalBarChartState extends State<SchoolMedalBarChart> {
 
       setState(() {
         _isLoading = false;
-        _initialized = true;
       });
     } catch (e) {
       setState(() {

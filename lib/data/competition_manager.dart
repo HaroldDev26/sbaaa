@@ -5,6 +5,7 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/competition.dart';
+import 'dart:convert';
 
 class CompetitionManager {
   // 單例模式實現
@@ -132,7 +133,10 @@ class CompetitionManager {
         end_date TEXT NOT NULL,
         status TEXT NOT NULL,
         created_by TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_by_uid TEXT,
+        created_at TEXT NOT NULL,
+        events TEXT,
+        metadata TEXT
       )
     ''');
 
@@ -221,8 +225,20 @@ class CompetitionManager {
         'end_date': competitionData['endDate'],
         'status': competitionData['status'],
         'created_by': competitionData['createdBy'],
+        'created_by_uid': competitionData['createdByUid'],
         'created_at': competitionData['createdAt'],
       };
+
+      // 將events和metadata轉換為JSON字符串
+      if (competitionData['events'] != null) {
+        row['events'] = jsonEncode(competitionData['events']);
+        _log.info('📝 轉換events為JSON: ${row['events']}');
+      }
+
+      if (competitionData['metadata'] != null) {
+        row['metadata'] = jsonEncode(competitionData['metadata']);
+        _log.info('📝 轉換metadata為JSON: ${row['metadata']}');
+      }
 
       _log.info('📝 從Map保存比賽到SQLite: $row');
 
@@ -320,13 +336,40 @@ class CompetitionManager {
             'endDate': maps[i]['end_date'],
             'status': maps[i]['status'],
             'createdBy': maps[i]['created_by'],
+            'createdByUid': maps[i]['created_by_uid'],
             'createdAt': maps[i]['created_at'],
           };
+
+          // 處理JSON格式的events和metadata
+          if (maps[i]['events'] != null) {
+            try {
+              modelData['events'] = jsonDecode(maps[i]['events']);
+              _log.info('📝 解析events JSON成功: ${modelData['events']}');
+            } catch (jsonError) {
+              _log.warning('⚠️ 解析events JSON失敗: $jsonError');
+            }
+          }
+
+          if (maps[i]['metadata'] != null) {
+            try {
+              modelData['metadata'] = jsonDecode(maps[i]['metadata']);
+              _log.info('📝 解析metadata JSON成功: ${modelData['metadata']}');
+
+              // 特別檢查年齡組別
+              if (modelData['metadata']['age_groups'] != null) {
+                _log.info(
+                    '📝 發現年齡組別數據: ${modelData['metadata']['age_groups']}');
+              }
+            } catch (jsonError) {
+              _log.warning('⚠️ 解析metadata JSON失敗: $jsonError');
+            }
+          }
 
           final model = CompetitionModel.fromMap(modelData);
           results.add(model);
           _log.info('✓ 成功轉換為模型 #${i + 1}: ${model.id} - ${model.name}');
         } catch (conversionError) {
+          _log.warning('❌ 轉換錯誤 #${i + 1}: $conversionError');
           // 跳過轉換失敗的記錄
         }
         i++;
@@ -375,8 +418,28 @@ class CompetitionManager {
         'endDate': results.first['end_date'],
         'status': results.first['status'],
         'createdBy': results.first['created_by'],
+        'createdByUid': results.first['created_by_uid'],
         'createdAt': results.first['created_at'],
       };
+
+      // 處理JSON格式的events和metadata
+      if (results.first['events'] != null) {
+        try {
+          modelData['events'] = jsonDecode(results.first['events']);
+          _log.info('📝 解析events JSON成功: ${modelData['events']}');
+        } catch (jsonError) {
+          _log.warning('⚠️ 解析events JSON失敗: $jsonError');
+        }
+      }
+
+      if (results.first['metadata'] != null) {
+        try {
+          modelData['metadata'] = jsonDecode(results.first['metadata']);
+          _log.info('📝 解析metadata JSON成功: ${modelData['metadata']}');
+        } catch (jsonError) {
+          _log.warning('⚠️ 解析metadata JSON失敗: $jsonError');
+        }
+      }
 
       return CompetitionModel.fromMap(modelData);
     } catch (e, stackTrace) {

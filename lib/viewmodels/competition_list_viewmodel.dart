@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/competition_model.dart';
 import '../services/competition_service.dart';
 import '../utils/age_group_handler.dart'; // 導入年齡分組處理工具
+import '../utils/searching_function.dart'; // 添加搜索函數導入
 
 // 競賽列表的狀態
 enum CompetitionLoadingState {
@@ -38,6 +39,9 @@ class CompetitionListViewModel extends ChangeNotifier {
   CompetitionModel? _selectedCompetition;
   StreamSubscription? _registrationsSubscription;
 
+  // 新增：標記是否已被釋放
+  bool _isDisposed = false;
+
   // Getters
   CompetitionLoadingState get loadingState => _loadingState;
   RegistrationActionState get registrationState => _registrationState;
@@ -65,6 +69,7 @@ class CompetitionListViewModel extends ChangeNotifier {
         .getUserRegistrationsStream(currentUser.uid)
         .listen((_) {
       // 報名狀態變化時刷新數據
+      if (_isDisposed) return; // 新增：安全檢查
       if (_selectedCompetition != null) {
         loadCompetitionDetails(_selectedCompetition!.id);
       } else {
@@ -76,12 +81,26 @@ class CompetitionListViewModel extends ChangeNotifier {
   // 釋放資源
   @override
   void dispose() {
+    _isDisposed = true; // 新增：標記已被釋放
     _registrationsSubscription?.cancel();
+    debugPrint('🚨 CompetitionListViewModel 已被釋放');
     super.dispose();
+  }
+
+  // 新增：安全的通知監聽器方法
+  @override
+  void notifyListeners() {
+    if (!_isDisposed) {
+      super.notifyListeners();
+    } else {
+      debugPrint('⚠️ 嘗試在 CompetitionListViewModel 被釋放後通知監聽器');
+    }
   }
 
   // 加載競賽列表
   Future<void> loadCompetitions() async {
+    if (_isDisposed) return; // 新增：安全檢查
+
     _loadingState = CompetitionLoadingState.loading;
     _errorMessage = '';
     notifyListeners();
@@ -90,6 +109,8 @@ class CompetitionListViewModel extends ChangeNotifier {
       // 使用服務層獲取數據
       final competitions = await _competitionService.getAvailableCompetitions();
 
+      if (_isDisposed) return; // 新增：安全檢查
+
       _allCompetitions =
           competitions.map((map) => CompetitionModel.fromMap(map)).toList();
 
@@ -97,6 +118,7 @@ class CompetitionListViewModel extends ChangeNotifier {
       _applyFilters();
       _loadingState = CompetitionLoadingState.loaded;
     } catch (e) {
+      if (_isDisposed) return; // 新增：安全檢查
       _loadingState = CompetitionLoadingState.error;
       _errorMessage = '載入比賽列表失敗: $e';
     }
@@ -106,6 +128,8 @@ class CompetitionListViewModel extends ChangeNotifier {
 
   // 加載特定競賽詳情
   Future<void> loadCompetitionDetails(String competitionId) async {
+    if (_isDisposed) return; // 新增：安全檢查
+
     _loadingState = CompetitionLoadingState.loading;
     _errorMessage = '';
     notifyListeners();
@@ -115,6 +139,8 @@ class CompetitionListViewModel extends ChangeNotifier {
       final competitionData =
           await _competitionService.getCompetitionDetails(competitionId);
 
+      if (_isDisposed) return; // 新增：安全檢查
+
       if (competitionData == null) {
         _loadingState = CompetitionLoadingState.error;
         _errorMessage = '找不到該比賽';
@@ -123,6 +149,7 @@ class CompetitionListViewModel extends ChangeNotifier {
         _loadingState = CompetitionLoadingState.loaded;
       }
     } catch (e) {
+      if (_isDisposed) return; // 新增：安全檢查
       _loadingState = CompetitionLoadingState.error;
       _errorMessage = '載入比賽詳情失敗: $e';
     }
@@ -132,6 +159,7 @@ class CompetitionListViewModel extends ChangeNotifier {
 
   // 設置搜索查詢
   void setSearchQuery(String query) {
+    if (_isDisposed) return; // 新增：安全檢查
     _searchQuery = query.toLowerCase();
     _applyFilters();
     notifyListeners();
@@ -139,6 +167,7 @@ class CompetitionListViewModel extends ChangeNotifier {
 
   // 設置狀態過濾器
   void setStatusFilter(String filter) {
+    if (_isDisposed) return; // 新增：安全檢查
     _statusFilter = filter;
     _applyFilters();
     notifyListeners();
@@ -146,42 +175,73 @@ class CompetitionListViewModel extends ChangeNotifier {
 
   // 設置選中的競賽
   void selectCompetition(CompetitionModel competition) {
+    if (_isDisposed) return; // 新增：安全檢查
     _selectedCompetition = competition;
     notifyListeners();
   }
 
   // 清除選中的競賽
   void clearSelectedCompetition() {
+    if (_isDisposed) return; // 新增：安全檢查
     _selectedCompetition = null;
     notifyListeners();
   }
 
   // 應用過濾器和搜索
   void _applyFilters() {
-    _filteredCompetitions = _allCompetitions.where((competition) {
-      // 檢查名稱是否包含搜索關鍵詞
-      final matchesQuery =
-          competition.name.toLowerCase().contains(_searchQuery);
+    if (_isDisposed) return; // 新增：安全檢查
 
-      // 不再檢查狀態過濾
-      return matchesQuery;
-    }).toList();
+    // 快速路徑：無需過濾
+    if (_searchQuery.isEmpty &&
+        (_statusFilter.isEmpty || _statusFilter == '全部')) {
+      _filteredCompetitions = List.from(_allCompetitions);
+      return;
+    }
+
+    // 將 CompetitionModel 轉換為 Map<String, dynamic> 格式
+    List<Map<String, dynamic>> competitionsAsMap = _allCompetitions
+        .map((comp) => {
+              'name': comp.name,
+              'description': comp.description,
+              'venue': comp.venue ?? '',
+              'status': comp.status,
+              'startDate': comp.startDate,
+              'endDate': comp.endDate,
+              'originalObject': comp, // 保存原始對象以便後續轉換回來
+            })
+        .toList();
+
+    // 使用 linearSearchMap 函數進行搜索
+    List<Map<String, dynamic>> filteredMaps = linearSearchMap(
+      competitionsAsMap,
+      _searchQuery,
+      _statusFilter == '全部' ? '' : _statusFilter,
+      isSorted: false, // 假設數據未排序
+    );
+
+    // 將搜索結果轉換回 CompetitionModel 對象
+    _filteredCompetitions = filteredMaps
+        .map((map) => map['originalObject'] as CompetitionModel)
+        .toList();
   }
 
   // 開始報名流程
   Future<void> startRegistration(CompetitionModel competition) async {
+    if (_isDisposed) return; // 新增：安全檢查
     _registrationState = RegistrationActionState.loading;
     notifyListeners();
 
     // 模擬短暫延遲，以顯示加載狀態
     await Future.delayed(const Duration(milliseconds: 300));
 
+    if (_isDisposed) return; // 新增：安全檢查
     _registrationState = RegistrationActionState.success;
     notifyListeners();
   }
 
   // 刷新數據
   Future<void> refresh() async {
+    if (_isDisposed) return; // 新增：安全檢查
     if (_selectedCompetition != null) {
       await loadCompetitionDetails(_selectedCompetition!.id);
     } else {
@@ -191,11 +251,13 @@ class CompetitionListViewModel extends ChangeNotifier {
 
   // 清除緩存
   void clearCache() {
+    if (_isDisposed) return; // 新增：安全檢查
     _competitionService.clearCache();
   }
 
   // 獲取適合某年齡的比賽列表
   List<CompetitionModel> getCompetitionsSuitableForAge(int age) {
+    if (_isDisposed) return []; // 新增：安全檢查
     return _allCompetitions.where((competition) {
       if (competition.metadata == null ||
           !competition.metadata!.containsKey('ageGroups')) {
@@ -226,6 +288,7 @@ class CompetitionListViewModel extends ChangeNotifier {
   // 根據出生日期篩選合適的比賽
   List<CompetitionModel> getCompetitionsSuitableForBirthDate(
       DateTime birthDate) {
+    if (_isDisposed) return []; // 新增：安全檢查
     // 使用AgeGroupHandler計算年齡
     int age = AgeGroupHandler.calculateAge(birthDate);
     return getCompetitionsSuitableForAge(age);
@@ -233,6 +296,8 @@ class CompetitionListViewModel extends ChangeNotifier {
 
   // 設置基於年齡的過濾
   void setAgeFilter(int age) {
+    if (_isDisposed) return; // 新增：安全檢查
+
     List<CompetitionModel> ageFilteredCompetitions =
         getCompetitionsSuitableForAge(age);
 
@@ -250,7 +315,9 @@ class CompetitionListViewModel extends ChangeNotifier {
 
   // 清除年齡過濾
   void clearAgeFilter() {
-    // 重新應用原始過濾器，不考慮年齡
+    if (_isDisposed) return; // 新增：安全檢查
+
+    // 重置為原始列表並應用其他過濾條件
     _applyFilters();
     notifyListeners();
   }

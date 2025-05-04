@@ -6,7 +6,7 @@ class AuthMethods {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // 獲取當前登入用戶
+  // Get current logged-in user
   Future<UserModel?> getCurrentUser() async {
     User? currentUser = _auth.currentUser;
     if (currentUser != null) {
@@ -19,7 +19,7 @@ class AuthMethods {
     return null;
   }
 
-  // 註冊新用戶
+  // Register new user
   Future<String> signUpUser({
     required String email,
     required String password,
@@ -30,14 +30,14 @@ class AuthMethods {
     String? gender,
     String? birthday,
   }) async {
-    String res = "Some error occurred";
+    String res = "An unexpected error occurred";
     try {
       if (email.isNotEmpty && password.isNotEmpty) {
-        // 註冊 Firebase Auth
+        // Register Firebase Auth
         UserCredential cred = await _auth.createUserWithEmailAndPassword(
             email: email, password: password);
 
-        // 創建用戶模型
+        // Create user model
         UserModel user = UserModel(
           uid: cred.user!.uid,
           email: email,
@@ -57,43 +57,67 @@ class AuthMethods {
 
         res = "success";
       } else {
-        res = "請輸入所有必填欄位";
+        res = "Please fill in all required fields";
+      }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        res = "Email address is already registered";
+      } else if (e.code == 'weak-password') {
+        res = "Password is too weak";
+      } else if (e.code == 'invalid-email') {
+        res = "Invalid email format";
+      } else {
+        res = "Registration failed: ${e.message}";
       }
     } catch (error) {
-      res = error.toString();
+      res = "Registration failed: $error";
     }
     return res;
   }
 
-  // 登入用戶
+  // Login user
   Future<String> loginUser({
     required String email,
     required String password,
   }) async {
-    String res = "Some error occurred";
+    String res = "An unexpected error occurred";
     try {
       if (email.isNotEmpty && password.isNotEmpty) {
-        // 登入 Firebase Auth
+        // Login to Firebase Auth
         await _auth.signInWithEmailAndPassword(
             email: email, password: password);
         res = "success";
       } else {
-        res = "請輸入電子郵件和密碼";
+        res = "Please enter email and password";
+      }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') {
+        res = "No account exists with this email address";
+      } else if (e.code == 'wrong-password') {
+        res = "Incorrect password";
+      } else if (e.code == 'invalid-email') {
+        res = "Invalid email format";
+      } else if (e.code == 'user-disabled') {
+        res = "This account has been disabled";
+      } else if (e.code == 'too-many-requests') {
+        res = "Too many login attempts. Please try again later";
+      } else {
+        res = "Login failed: ${e.message}";
       }
     } catch (err) {
-      res = err.toString();
+      res = "Login failed: $err";
     }
     return res;
   }
 
-  // 登出用戶
+  // Logout user
   Future<void> signOut() async {
     await _auth.signOut();
   }
 
-  // 更新用戶資料
+  // Update user data
   Future<String> updateUserData(Map<String, dynamic> userData) async {
-    String res = "Some error occurred";
+    String res = "An unexpected error occurred";
     try {
       User? currentUser = _auth.currentUser;
       if (currentUser != null) {
@@ -103,10 +127,10 @@ class AuthMethods {
             .update(userData);
         res = "success";
       } else {
-        res = "用戶未登入";
+        res = "User not logged in";
       }
     } catch (error) {
-      res = error.toString();
+      res = "Update failed: $error";
     }
     return res;
   }
